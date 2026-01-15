@@ -1,0 +1,7 @@
+{
+  "name": "Seyal AI",
+  "description": "Production-grade agentic AI system for project management and coordination.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
