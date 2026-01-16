@@ -7,7 +7,7 @@ import {
   LayoutDashboard, CheckSquare, Briefcase, Users, Settings, Zap,
   Kanban as KanbanIcon, Table as TableIcon, Calendar as CalendarIcon, Filter,
   ArrowUpDown, ArrowUp, ArrowDown, Search, CheckCircle2, CopyPlus, Archive, Trash2, Maximize2,
-  Bell, Mail, PieChart, TrendingUp, AlertTriangle, Wallet, ArrowRight
+  Bell, Mail, PieChart, TrendingUp, AlertTriangle, Wallet, ArrowRight, Pencil, Calendar, Link
 } from 'lucide-react';
 
 // --- Types ---
@@ -52,6 +52,7 @@ interface Task {
   description: string;
   tags: string[];
   subtasks: Subtask[];
+  dependencies: string[]; // List of Task IDs that this task depends on
   recurrence: {
     enabled: boolean;
     frequency: string;
@@ -166,6 +167,7 @@ const MOCK_TASKS: Task[] = [
         { id: '1', text: 'Finalize ad copy', completed: true },
         { id: '2', text: 'Approve visuals', completed: false },
     ],
+    dependencies: [],
     recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
     aiCoordination: true,
     aiChannels: { 
@@ -195,6 +197,7 @@ const MOCK_TASKS: Task[] = [
     description: 'Update the proposal based on the feedback from the last meeting.',
     tags: ['#sales', '#client'],
     subtasks: [],
+    dependencies: [],
     recurrence: { enabled: true, frequency: 'Weekly', interval: 1 },
     aiCoordination: false,
     aiChannels: { whatsapp: false, email: true, voice: false },
@@ -218,6 +221,7 @@ const MOCK_TASKS: Task[] = [
         { id: '1', text: 'Collect metrics', completed: true },
         { id: '2', text: 'Prepare slides', completed: true },
     ],
+    dependencies: [],
     recurrence: { enabled: false, frequency: 'Monthly', interval: 1 },
     aiCoordination: false,
     aiChannels: { whatsapp: false, email: false, voice: false },
@@ -226,6 +230,15 @@ const MOCK_TASKS: Task[] = [
     list: 'Management'
   }
 ];
+
+// --- Helper Functions ---
+
+const formatDateDisplay = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 // --- Components ---
 
@@ -252,6 +265,174 @@ const SidebarItem = ({
     {label && <span className="font-medium text-sm truncate">{label}</span>}
   </button>
 );
+
+// --- Custom Picker Components ---
+
+const CustomDatePicker = ({ 
+  value, 
+  onChange, 
+  label, 
+  className,
+  compact = false 
+}: { 
+  value: string, 
+  onChange: (val: string) => void, 
+  label?: string, 
+  className?: string,
+  compact?: boolean
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Parse value or default to today for view
+  const dateValue = value ? new Date(value) : new Date();
+  const safeDate = isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  
+  const [viewDate, setViewDate] = useState(safeDate);
+
+  useEffect(() => {
+    if (isOpen && value) {
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) setViewDate(d);
+    }
+  }, [isOpen, value]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const handleDayClick = (day: number) => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const newDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    onChange(newDateStr);
+    setIsOpen(false);
+  };
+
+  const changeMonth = (offset: number) => {
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1));
+  };
+
+  const daysInMonth = getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth());
+  const firstDay = getFirstDayOfMonth(viewDate.getFullYear(), viewDate.getMonth());
+  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const emptyDays = Array.from({ length: firstDay }, (_, i) => i);
+  const monthName = viewDate.toLocaleString('default', { month: 'long' });
+
+  return (
+     <div className={`relative ${className || ''}`} ref={containerRef}>
+        {label && <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">{label}</label>}
+        <button 
+            onClick={() => setIsOpen(!isOpen)} 
+            className={`flex items-center w-full text-left transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${compact ? 'bg-transparent text-xs text-slate-600 font-medium py-1 hover:text-primary' : 'px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium bg-white hover:border-primary text-slate-700'}`}
+        >
+           {!compact && <Calendar size={16} className="mr-2 text-slate-400" />}
+           <span className={`${!value && 'text-slate-400'}`}>{value ? formatDateDisplay(value) : 'Select Date'}</span>
+        </button>
+        
+        {isOpen && (
+           <div className="absolute top-full left-0 z-50 bg-white shadow-xl border border-slate-100 p-4 w-64 rounded-2xl mt-2 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-4">
+                  <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft size={16}/></button>
+                  <span className="text-sm font-bold text-slate-800">{monthName} {viewDate.getFullYear()}</span>
+                  <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500"><ChevronRight size={16}/></button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                  {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <div key={d} className="text-[10px] font-bold text-slate-400 uppercase">{d}</div>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                  {emptyDays.map(d => <div key={`empty-${d}`} />)}
+                  {daysArray.map(day => {
+                      const isSelected = value && new Date(value).getDate() === day && new Date(value).getMonth() === viewDate.getMonth() && new Date(value).getFullYear() === viewDate.getFullYear();
+                      const isToday = new Date().getDate() === day && new Date().getMonth() === viewDate.getMonth() && new Date().getFullYear() === viewDate.getFullYear();
+                      return (
+                          <button 
+                            key={day} 
+                            onClick={() => handleDayClick(day)}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all
+                                ${isSelected ? 'bg-primary text-white shadow-md' : isToday ? 'bg-slate-100 text-primary font-bold' : 'text-slate-600 hover:bg-slate-50'}
+                            `}
+                          >
+                              {day}
+                          </button>
+                      );
+                  })}
+              </div>
+           </div>
+        )}
+     </div>
+  );
+};
+
+const CustomTimePicker = ({ 
+    value, 
+    onChange, 
+    label,
+    className,
+    compact = false
+}: { 
+    value: string, 
+    onChange: (val: string) => void, 
+    label?: string,
+    className?: string,
+    compact?: boolean
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+          if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            setIsOpen(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+    const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
+
+    return (
+        <div className={`relative ${className || ''}`} ref={containerRef}>
+            {label && <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">{label}</label>}
+            <button 
+                onClick={() => setIsOpen(!isOpen)} 
+                className={`flex items-center w-full text-left transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${compact ? 'bg-transparent text-[10px] text-slate-400 hover:text-primary py-1' : 'px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium bg-white hover:border-primary text-slate-700'}`}
+            >
+               {!compact && <Clock size={16} className="mr-2 text-slate-400" />}
+               <span className={`${!value && 'text-slate-400'}`}>{value || (compact ? '--:--' : 'Select Time')}</span>
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 z-50 bg-white shadow-xl border border-slate-100 p-2 w-48 rounded-2xl mt-2 flex gap-2 h-48 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="text-[10px] font-bold text-slate-400 text-center mb-1 sticky top-0 bg-white">HR</div>
+                        {hours.map(h => (
+                            <button key={h} onClick={() => onChange(`${h}:${value ? value.split(':')[1] || '00' : '00'}`)} className={`w-full py-1.5 text-xs rounded hover:bg-slate-50 mb-0.5 ${value?.startsWith(h) ? 'bg-blue-50 text-primary font-bold' : 'text-slate-600'}`}>{h}</button>
+                        ))}
+                    </div>
+                    <div className="w-px bg-slate-100" />
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        <div className="text-[10px] font-bold text-slate-400 text-center mb-1 sticky top-0 bg-white">MIN</div>
+                        {minutes.map(m => (
+                            <button key={m} onClick={() => onChange(`${value ? value.split(':')[0] || '09' : '09'}:${m}`)} className={`w-full py-1.5 text-xs rounded hover:bg-slate-50 mb-0.5 ${value?.endsWith(m) ? 'bg-blue-50 text-primary font-bold' : 'text-slate-600'}`}>{m}</button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const SectionHeader = ({ title, subtitle, action }: any) => (
   <div className="flex justify-between items-end mb-6">
@@ -436,12 +617,10 @@ const NewProjectModal = ({ isOpen, onClose, onSubmit }: { isOpen: boolean, onClo
 
                         <div className="grid grid-cols-2 gap-4">
                              <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Start Date</label>
-                                <input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-slate-600" />
+                                <CustomDatePicker label="Start Date" value={formData.startDate} onChange={val => setFormData({...formData, startDate: val})} />
                             </div>
                              <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">End Date</label>
-                                <input type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-slate-600" />
+                                <CustomDatePicker label="End Date" value={formData.endDate} onChange={val => setFormData({...formData, endDate: val})} />
                             </div>
                         </div>
 
@@ -463,6 +642,104 @@ const NewProjectModal = ({ isOpen, onClose, onSubmit }: { isOpen: boolean, onClo
                     </button>
                 </div>
             )}
+        </div>
+    </div>
+  );
+};
+
+const EditProjectModal = ({ 
+  isOpen, 
+  onClose, 
+  project, 
+  onSave 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  project: Project, 
+  onSave: (updatedProject: Project) => void 
+}) => {
+  const [formData, setFormData] = useState<Project>(project);
+
+  useEffect(() => {
+    setFormData(project);
+  }, [project, isOpen]);
+
+  const handleSubmit = () => {
+    onSave(formData);
+    onClose();
+  };
+
+  const updateBudget = (value: number) => {
+      setFormData(prev => ({
+          ...prev,
+          budget: { ...prev.budget, total: value }
+      }));
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 className="text-lg font-bold text-slate-900">Edit Project Settings</h2>
+                <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label>
+                    <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label>
+                        <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                            {AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+                            <input type="number" value={formData.budget.total} onChange={e => updateBudget(parseFloat(e.target.value) || 0)} className="w-full pl-6 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0.00" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label>
+                        <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as ProjectStatus})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                            {['Draft', 'Planning', 'Ready', 'Execution', 'On Hold', 'Completed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Risk Level</label>
+                        <select value={formData.riskLevel} onChange={e => setFormData({...formData, riskLevel: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                            {['Low', 'Medium', 'High'].map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <CustomDatePicker label="Start Date" value={formData.startDate} onChange={val => setFormData({...formData, startDate: val})} />
+                    </div>
+                     <div>
+                        <CustomDatePicker label="End Date" value={formData.endDate} onChange={val => setFormData({...formData, endDate: val})} />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Description</label>
+                    <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" />
+                </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button>
+                <button onClick={handleSubmit} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Save Changes</button>
+            </div>
         </div>
     </div>
   );
@@ -606,7 +883,8 @@ const TaskDetailPanel = ({
   task,
   onAction,
   initialDate,
-  projectId
+  projectId,
+  availableTasks = []
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
@@ -614,7 +892,8 @@ const TaskDetailPanel = ({
   task?: Task | null,
   onAction?: (action: 'share'|'clone'|'archive'|'delete', task: Task) => void,
   initialDate?: string,
-  projectId?: string
+  projectId?: string,
+  availableTasks?: Task[]
 }) => {
   const [formData, setFormData] = useState<Task>(task || {
     id: Date.now().toString(),
@@ -629,6 +908,7 @@ const TaskDetailPanel = ({
     description: '',
     tags: [],
     subtasks: [],
+    dependencies: [],
     recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
     aiCoordination: false,
     aiChannels: { whatsapp: true, email: false, voice: false },
@@ -642,7 +922,9 @@ const TaskDetailPanel = ({
   const [newListName, setNewListName] = useState('');
   const [isTagInputVisible, setIsTagInputVisible] = useState(false);
   const [tagInputValue, setTagInputValue] = useState('');
+  const [isDependencyPickerOpen, setIsDependencyPickerOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const depRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (task) {
@@ -662,6 +944,7 @@ const TaskDetailPanel = ({
         description: '',
         tags: [],
         subtasks: [],
+        dependencies: [],
         recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
         aiCoordination: false,
         aiChannels: { whatsapp: true, email: false, voice: false },
@@ -676,6 +959,9 @@ const TaskDetailPanel = ({
       const handleClickOutside = (event: MouseEvent) => {
           if (listRef.current && !listRef.current.contains(event.target as Node)) {
               setIsListOpen(false);
+          }
+           if (depRef.current && !depRef.current.contains(event.target as Node)) {
+              setIsDependencyPickerOpen(false);
           }
       };
       document.addEventListener('mousedown', handleClickOutside);
@@ -695,6 +981,11 @@ const TaskDetailPanel = ({
       if (formData.list) lists.add(formData.list);
       return Array.from(lists);
   }, [formData.list]);
+
+  // Valid candidates for dependencies (exclude self and already linked)
+  const dependencyCandidates = useMemo(() => {
+      return availableTasks.filter(t => t.id !== formData.id && !formData.dependencies?.includes(t.id));
+  }, [availableTasks, formData.id, formData.dependencies]);
 
   if (!isOpen) return null;
 
@@ -818,6 +1109,15 @@ const TaskDetailPanel = ({
       }
   };
 
+  const addDependency = (depId: string) => {
+      updateField('dependencies', [...(formData.dependencies || []), depId]);
+      setIsDependencyPickerOpen(false);
+  };
+
+  const removeDependency = (depId: string) => {
+      updateField('dependencies', formData.dependencies?.filter(id => id !== depId) || []);
+  };
+
   const updateAiChannel = (channel: 'whatsapp' | 'email' | 'voice', value: boolean) => {
       setFormData(prev => ({
           ...prev,
@@ -905,9 +1205,8 @@ const TaskDetailPanel = ({
                         <div className="flex-1">
                             <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Due Date</label>
                             <div className="w-full flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
-                                <CalendarClock size={18} className="text-red-500" />
-                                <input type="date" value={formData.dueDate} onChange={(e) => updateField('dueDate', e.target.value)} className="bg-transparent text-sm font-medium text-slate-900 outline-none flex-1" />
-                                <input type="time" value={formData.dueTime || ''} onChange={(e) => updateField('dueTime', e.target.value)} className="bg-transparent text-sm font-medium text-slate-900 outline-none w-20 text-right" />
+                                <CustomDatePicker value={formData.dueDate} onChange={(val) => updateField('dueDate', val)} className="flex-1" compact />
+                                <CustomTimePicker value={formData.dueTime || ''} onChange={(val) => updateField('dueTime', val)} className="w-24 border-l border-slate-100 pl-2" compact />
                             </div>
                         </div>
                     </div>
@@ -960,8 +1259,7 @@ const TaskDetailPanel = ({
                                     </select>
                                 </div>
                                  <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">End Date</label>
-                                    <input type="date" value={formData.recurrence.endDate || ''} onChange={(e) => updateRecurrence('endDate', e.target.value)} className="w-full bg-white border border-slate-200 text-xs rounded-lg p-2 outline-none focus:border-primary" />
+                                    <CustomDatePicker label="End Date" value={formData.recurrence.endDate || ''} onChange={(val) => updateRecurrence('endDate', val)} compact />
                                 </div>
                             </div>
                         )}
@@ -1097,6 +1395,54 @@ const TaskDetailPanel = ({
                 </div>
             </div>
 
+             <div className="px-4 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                    <Link size={16} className="text-slate-500" />
+                    <h3 className="text-sm font-semibold text-slate-900">Dependencies</h3>
+                </div>
+                <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
+                    {formData.dependencies && formData.dependencies.length > 0 ? (
+                        formData.dependencies.map(depId => {
+                            const depTask = availableTasks.find(t => t.id === depId);
+                            return (
+                                <div key={depId} className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className={`w-2 h-2 rounded-full ${depTask?.status === 'Done' ? 'bg-green-500' : 'bg-slate-300'}`} />
+                                        <span className="text-xs font-medium truncate text-slate-700">{depTask?.title || 'Unknown Task'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${depTask?.status === 'Done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{depTask?.status || 'Unknown'}</span>
+                                         <button onClick={() => removeDependency(depId)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={14}/></button>
+                                    </div>
+                                </div>
+                            )
+                        })
+                    ) : (
+                        <p className="text-xs text-slate-400 italic text-center py-2">No prerequisites linked. This task can start anytime.</p>
+                    )}
+                    
+                    <div className="relative" ref={depRef}>
+                         <button onClick={() => setIsDependencyPickerOpen(!isDependencyPickerOpen)} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white border border-dashed border-slate-300 text-slate-500 hover:text-primary hover:border-primary hover:bg-blue-50 transition-all text-xs font-bold uppercase tracking-wide">
+                            <Plus size={14} /> Add Dependency
+                         </button>
+                         {isDependencyPickerOpen && (
+                             <div className="absolute bottom-full left-0 right-0 mb-1 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 max-h-48 overflow-y-auto custom-scrollbar">
+                                 {dependencyCandidates.length > 0 ? (
+                                     dependencyCandidates.map(t => (
+                                         <button key={t.id} onClick={() => addDependency(t.id)} className="w-full text-left px-4 py-2.5 text-xs hover:bg-slate-50 border-b border-slate-50 last:border-0 flex items-center justify-between group">
+                                             <span className="truncate font-medium text-slate-700">{t.title}</span>
+                                             <span className="text-[10px] text-slate-400 group-hover:text-primary">{t.status}</span>
+                                         </button>
+                                     ))
+                                 ) : (
+                                     <div className="px-4 py-3 text-xs text-slate-400 text-center">No other tasks available to link.</div>
+                                 )}
+                             </div>
+                         )}
+                    </div>
+                </div>
+            </div>
+
             <div className="px-4 mb-8">
                 <div className="flex items-center justify-between mb-3 px-1">
                     <h3 className="text-base font-semibold text-slate-900">Subtasks</h3>
@@ -1169,6 +1515,12 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ list, count, tasks, onDragO
                     <div className="text-right"><div className="text-xs text-slate-400 font-medium">{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>{task.dueTime && (<div className="text-[10px] text-slate-400">{task.dueTime}</div>)}</div>
                   )}
               </div>
+              {task.dependencies && task.dependencies.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-1 text-[10px] text-slate-400">
+                      <Link size={12} />
+                      <span>{task.dependencies.length} Prerequisite{task.dependencies.length > 1 ? 's' : ''}</span>
+                  </div>
+              )}
            </div>
          ))}
       </div>
@@ -1178,7 +1530,6 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ list, count, tasks, onDragO
 
 // Reused CalendarBoard (implied implementation same as before but accepting props correctly)
 const CalendarBoard = ({ tasks, onEditTask, onNewTaskWithDate }: { tasks: Task[], onEditTask: (task: Task) => void, onNewTaskWithDate: (date: string) => void }) => {
-    // Basic placeholder for brevity, logic remains same as original
   return (
       <div className="flex-1 flex items-center justify-center text-slate-400 bg-white rounded-2xl border border-slate-100 m-4">
           <div className="text-center">
@@ -1219,7 +1570,36 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId }: 
 
   const showToast = (msg: string) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 3000); };
   
+  const checkDependencies = (task: Task, newStatus?: string): boolean => {
+      if (!task.dependencies || task.dependencies.length === 0) return true;
+      const targetStatus = newStatus || task.status;
+      // Only block if moving to 'In Progress' or 'Done' (or 'Review') - basically starting or finishing
+      // If it's already 'Todo', we don't block.
+      if (targetStatus === 'Todo' || targetStatus === 'Draft') return true;
+
+      const blockingTasks = task.dependencies
+          .map(id => tasks.find(t => t.id === id))
+          .filter(t => t && t.status !== 'Done');
+      
+      if (blockingTasks.length > 0) {
+          const names = blockingTasks.map(t => t?.title).join(', ');
+          showToast(`Cannot start: Prerequisite tasks incomplete (${blockingTasks.length})`);
+          return false;
+      }
+      return true;
+  };
+
   const handleSaveTaskWrapper = (savedTask: Task) => { 
+      // Check dependencies if status is active
+      if (!checkDependencies(savedTask, savedTask.status)) {
+          // If dependencies not met, we don't save status changes that violate rules if they were just made.
+          // But allow saving other fields? For simplicity, we block save if status is invalid.
+          // Or better: Revert status? 
+          // Let's assume the user wants to save edits but we might need to revert status if invalid.
+          // For this implementation, we just return and show toast from checkDependencies.
+          return; 
+      }
+
       if (editingTask) onUpdateTask(savedTask); 
       else onAddTask(savedTask); 
       setIsModalOpen(false); 
@@ -1230,6 +1610,11 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId }: 
   const handleInlineUpdate = (id: string, field: keyof Task | string, value: any) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
+    
+    // Dependency Check for Inline Status Updates
+    if (field === 'status') {
+         if (!checkDependencies(task, value)) return;
+    }
     
     let updatedTask = { ...task };
 
@@ -1300,10 +1685,10 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId }: 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative flex flex-col h-full">
       {toastMessage && (<div className="absolute top-4 right-1/2 translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg z-[60] animate-in fade-in slide-in-from-top-2 text-sm font-medium flex items-center"><CheckCircle2 size={16} className="mr-2 text-green-400" />{toastMessage}</div>)}
-      <TaskDetailPanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveTaskWrapper} task={editingTask} onAction={handleTaskAction} initialDate={selectedDateForNewTask} projectId={projectId} />
+      <TaskDetailPanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveTaskWrapper} task={editingTask} onAction={handleTaskAction} initialDate={selectedDateForNewTask} projectId={projectId} availableTasks={tasks} />
       
       {/* Conditionally render header based on context */}
-      {!projectId && (
+      {!projectId ? (
           <SectionHeader title="My Tasks" subtitle="Priority items and AI-delegated actions" action={
               <div className="flex space-x-3 items-center">
                 <button onClick={() => showToast('All changes saved successfully')} className="flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 hover:text-primary transition-colors"><Save size={16} className="mr-2" /> Save</button>
@@ -1317,6 +1702,18 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId }: 
               </div>
             }
           />
+      ) : (
+        <div className="flex justify-between items-center mb-2">
+             <div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center">
+                <button onClick={() => setViewMode('board')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'board' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><KanbanIcon size={14} className="mr-2" /> Board</button>
+                <button onClick={() => setViewMode('table')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><TableIcon size={14} className="mr-2" /> Table</button>
+                <button onClick={() => setViewMode('calendar')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><CalendarIcon size={14} className="mr-2" /> Calendar</button>
+            </div>
+            <div className="flex items-center gap-3">
+                <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${isFilterOpen ? 'bg-slate-100 border-slate-300 text-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Filter size={16} className="mr-2" /> Filter</button>
+                <button onClick={() => openNewTaskModal()} className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-primary/20"><Plus size={16} className="mr-2" /> Add Task</button>
+            </div>
+        </div>
       )}
       
       {/* Render filters only if filter open or explicit dashboard view - for Project view we might want simpler filters later */}
@@ -1364,13 +1761,23 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId }: 
                                     <div className="w-32 flex items-center pr-2" onClick={e => e.stopPropagation()}><div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-white shrink-0 mr-2">{task.assignee === 'Me' ? 'ME' : task.assignee.charAt(0)}</div><select value={task.assignee} onChange={e => handleInlineUpdate(task.id, 'assignee', e.target.value)} className="bg-transparent text-xs text-slate-600 border-none focus:ring-0 w-full cursor-pointer p-0 text-left"><option value="Me">Me</option><option value="AI Agent">AI Agent</option><option value="Team">Team</option></select></div>
                                     <div className="w-28 pr-2" onClick={e => e.stopPropagation()}><select value={task.status} onChange={e => handleInlineUpdate(task.id, 'status', e.target.value)} className={`w-full bg-transparent text-[10px] font-bold uppercase border-none focus:ring-0 cursor-pointer text-left p-0 ${task.status === 'Done' ? 'text-green-700' : task.status === 'In Progress' ? 'text-blue-700' : task.status === 'Review' ? 'text-purple-700' : 'text-slate-600'}`}><option value="Todo">Todo</option><option value="In Progress">In Progress</option><option value="Review">Review</option><option value="Done">Done</option><option value="Archived">Archived</option></select></div>
                                     <div className="w-24 pr-2" onClick={e => e.stopPropagation()}><select value={task.priority} onChange={e => handleInlineUpdate(task.id, 'priority', e.target.value)} className={`w-full bg-transparent text-[10px] font-bold uppercase border-none focus:ring-0 cursor-pointer text-left p-0 ${task.priority === 'Urgent' ? 'text-red-600' : task.priority === 'High' ? 'text-orange-600' : task.priority === 'Medium' ? 'text-blue-600' : 'text-slate-500'}`}><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
-                                    <div className="w-32 pr-2" onClick={e => e.stopPropagation()}><input type="date" value={task.dueDate} onChange={e => handleInlineUpdate(task.id, 'dueDate', e.target.value)} className="w-full bg-transparent text-xs text-slate-600 border-none focus:ring-0 p-0 text-left font-medium" /><input type="time" value={task.dueTime || ''} onChange={e => handleInlineUpdate(task.id, 'dueTime', e.target.value)} className="w-full bg-transparent text-[10px] text-slate-400 border-none focus:ring-0 p-0 text-left h-4" /></div>
+                                    <div className="w-32 pr-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                        <CustomDatePicker value={task.dueDate} onChange={val => handleInlineUpdate(task.id, 'dueDate', val)} compact className="flex-1" />
+                                        <CustomTimePicker value={task.dueTime || ''} onChange={val => handleInlineUpdate(task.id, 'dueTime', val)} compact className="w-12" />
+                                    </div>
                                     <div className="w-24 pr-2" onClick={e => e.stopPropagation()}><div className="relative"><span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span><input type="number" value={task.budget.planned || ''} onChange={e => handleInlineUpdate(task.id, 'budget.planned', isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value))} placeholder="0" className="w-full bg-transparent text-left text-xs border-none focus:ring-0 p-0 pl-3" /></div></div>
                                     <div className="w-24 pr-2" onClick={e => e.stopPropagation()}><div className="relative"><span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span><input type="number" value={task.budget.agreed || ''} onChange={e => handleInlineUpdate(task.id, 'budget.agreed', isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value))} placeholder="0" className="w-full bg-transparent text-left text-xs font-medium border-none focus:ring-0 p-0 pl-3" /></div></div>
                                     <div className="w-24 pr-2" onClick={e => e.stopPropagation()}><div className="relative"><span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span><input type="number" value={task.budget.advance || ''} onChange={e => handleInlineUpdate(task.id, 'budget.advance', isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value))} placeholder="0" className="w-full bg-transparent text-left text-xs border-none focus:ring-0 p-0 pl-3" /></div></div>
                                     <div className="w-24 text-left pr-2 font-medium text-slate-700">{(task.budget.advance || 0) >= (task.budget.agreed || 0) ? '' : `$${((task.budget.agreed || 0) - (task.budget.advance || 0)).toFixed(2)}`}</div>
-                                    <div className="w-32 pr-2" onClick={e => e.stopPropagation()}><input type="date" value={task.budget.paymentDueDate || ''} onChange={e => handleInlineUpdate(task.id, 'budget.paymentDueDate', e.target.value)} className="w-full bg-transparent text-xs text-slate-600 border-none focus:ring-0 p-0 text-left" /></div>
+                                    <div className="w-32 pr-2" onClick={e => e.stopPropagation()}><CustomDatePicker value={task.budget.paymentDueDate || ''} onChange={val => handleInlineUpdate(task.id, 'budget.paymentDueDate', val)} compact /></div>
                                     <div className="w-14 flex justify-end relative gap-1"><div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center"><button className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-full" onClick={() => openEditTaskModal(task)}><Maximize2 size={16} /></button><button className="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-full" onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === task.id ? null : task.id); }}><MoreHorizontal size={18} /></button><ActionMenu isOpen={activeMenuId === task.id} onClose={() => setActiveMenuId(null)} onShare={() => handleTaskAction('share', task)} onClone={() => handleTaskAction('clone', task)} onArchive={() => handleTaskAction('archive', task)} onDelete={() => handleTaskAction('delete', task)} /></div></div>
+                                    
+                                    {/* Inline Dependency Indicator */}
+                                    {task.dependencies && task.dependencies.length > 0 && (
+                                        <div className="absolute right-20 top-1/2 -translate-y-1/2" title="Has dependencies">
+                                            <Link size={14} className="text-slate-400" />
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}
@@ -1456,7 +1863,8 @@ const ProjectDetailView = ({
     onUpdateTask,
     onAddTask,
     onDeleteTask,
-    projects
+    projects,
+    onUpdateProject
 }: { 
     projectId: string, 
     onBack: () => void,
@@ -1464,17 +1872,38 @@ const ProjectDetailView = ({
     onUpdateTask: (task: Task) => void,
     onAddTask: (task: Task) => void,
     onDeleteTask: (taskId: string) => void,
-    projects: Project[]
+    projects: Project[],
+    onUpdateProject: (project: Project) => void
 }) => {
   const project = projects.find(p => p.id === projectId);
   const [activeTab, setActiveTab] = useState<'plan' | 'budget' | 'activity'>('plan');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   const projectTasks = useMemo(() => tasks.filter(t => t.projectId === projectId), [tasks, projectId]);
 
   if (!project) return <div>Project not found</div>;
 
+  const showToast = (msg: string) => {
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 3000);
+  };
+
   return (
-    <div className="h-full flex flex-col animate-in slide-in-from-right duration-300">
+    <div className="h-full flex flex-col animate-in slide-in-from-right duration-300 relative">
+      {toastMessage && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg z-[60] animate-in fade-in slide-in-from-top-2 text-sm font-medium flex items-center">
+              <CheckCircle2 size={16} className="mr-2 text-green-400" />
+              {toastMessage}
+          </div>
+      )}
+
+      <EditProjectModal 
+        isOpen={isEditModalOpen} 
+        onClose={() => setIsEditModalOpen(false)} 
+        project={project} 
+        onSave={(p) => { onUpdateProject(p); showToast('Project details updated'); }} 
+      />
       {/* Header */}
       <div className="flex items-start justify-between mb-6 pb-4 border-b border-slate-100">
         <div className="flex items-start gap-4">
@@ -1495,8 +1924,16 @@ const ProjectDetailView = ({
               <div className="text-xs font-medium text-slate-500">Budget Utilized</div>
               <div className="text-lg font-bold text-slate-800">${project.budget.spent.toLocaleString()} <span className="text-xs text-slate-400 font-normal">of ${project.budget.total.toLocaleString()}</span></div>
            </div>
+           
+           <button onClick={() => showToast('All changes saved successfully')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 hover:text-primary transition-colors shadow-sm">
+                <Save size={16} /> Save
+           </button>
+
            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"><Sparkles size={16} /> AI Coach</button>
-           <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg"><Settings size={20} /></button>
+           
+           <button onClick={() => setIsEditModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 hover:text-primary transition-colors shadow-sm">
+                <Pencil size={16} /> Edit Project
+           </button>
         </div>
       </div>
 
@@ -1545,6 +1982,10 @@ const App = () => {
       setTasks(prev => prev.filter(t => t.id !== taskId));
   };
 
+  const handleUpdateProject = (updatedProject: Project) => {
+      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
   const handleCreateProject = (data: NewProjectPayload) => {
       const newId = `PROJ-${Date.now()}`;
       const newProject: Project = {
@@ -1574,6 +2015,7 @@ const App = () => {
               description: 'AI generated initial task: Review project scope and timeline.',
               tags: ['#planning', '#ai-generated'],
               subtasks: [],
+              dependencies: [],
               recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
               aiCoordination: false,
               aiChannels: { whatsapp: false, email: false, voice: false },
@@ -1593,6 +2035,7 @@ const App = () => {
               description: 'AI generated task: Confirm budget allocation for key categories.',
               tags: ['#budget', '#finance'],
               subtasks: [],
+              dependencies: [],
               recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
               aiCoordination: false,
               aiChannels: { whatsapp: false, email: false, voice: false },
@@ -1650,6 +2093,7 @@ const App = () => {
                   onAddTask={handleAddTask}
                   onDeleteTask={handleDeleteTask}
                   projects={projects}
+                  onUpdateProject={handleUpdateProject}
               />
             : <ProjectsView 
                   projects={projects}
