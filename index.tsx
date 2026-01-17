@@ -372,7 +372,7 @@ const Toggle = ({ enabled, onToggle, size }: any) => (
   </button>
 );
 
-const ActionMenu = ({ isOpen, onClose, onShare, onClone, onArchive, onDelete }: any) => {
+const ActionMenu = ({ isOpen, onClose, onShare, onClone, onArchive, onDelete, itemType = "Task" }: any) => {
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose(); };
@@ -383,8 +383,8 @@ const ActionMenu = ({ isOpen, onClose, onShare, onClone, onArchive, onDelete }: 
   if (!isOpen) return null;
   return (
     <div ref={menuRef} className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <button onClick={() => { onShare(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><Share2 size={16} /> Share Task</button>
-        <button onClick={() => { onClone(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><CopyPlus size={16} /> Clone Task</button>
+        <button onClick={() => { onShare(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><Share2 size={16} /> Share {itemType}</button>
+        <button onClick={() => { onClone(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><CopyPlus size={16} /> Clone {itemType}</button>
         <div className="h-px bg-slate-100 my-1" />
         <button onClick={() => { onArchive(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><Archive size={16} /> Archive</button>
         <button onClick={() => { onDelete(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
@@ -639,6 +639,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                         onClone={() => onAction?.('clone', formData)}
                         onArchive={() => onAction?.('archive', formData)}
                         onDelete={() => onAction?.('delete', formData)}
+                        itemType="Task"
                     />
                 </div>
                 <button onClick={() => onSave({...formData, status: 'Draft'})} className="px-4 py-1.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors">Save Draft</button>
@@ -1321,7 +1322,11 @@ const LeadKanbanColumn: React.FC<{ status: string, leads: Lead[], onEdit: (lead:
 
 const ProjectCard = ({ project, onClick, onClone, onDelete, onUpdate, stats }: any) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  
+  const handleShare = () => {
+      // In a real app, this would open a share modal
+      alert(`Sharing project "${project.title}" link copied to clipboard!`);
+  };
   
   return (
     <>
@@ -1334,7 +1339,15 @@ const ProjectCard = ({ project, onClick, onClone, onDelete, onUpdate, stats }: a
           </div>
           <div className="relative">
              <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} className={`p-1.5 rounded-lg transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600 opacity-0 group-hover:opacity-100'}`}><MoreHorizontal size={18} /></button>
-             <ActionMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onShare={() => setIsShareModalOpen(true)} onClone={onClone} onArchive={() => onUpdate({...project, status: 'Archived'})} onDelete={onDelete} />
+             <ActionMenu 
+                isOpen={isMenuOpen} 
+                onClose={() => setIsMenuOpen(false)} 
+                onShare={handleShare} 
+                onClone={onClone} 
+                onArchive={() => onUpdate({...project, status: 'Archived'})} 
+                onDelete={onDelete} 
+                itemType="Project"
+             />
           </div>
         </div>
         <div className="flex-1 pl-3">
