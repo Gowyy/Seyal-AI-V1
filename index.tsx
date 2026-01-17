@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
-  X, Share2, MoreHorizontal, Check, ChevronDown, Minus, 
-  ChevronUp, AlertCircle, Repeat, Bot, MessageCircle, Clock, Phone, 
-  History as HistoryIcon, Folder, ChevronRight, ChevronLeft, Plus, Hash, Sparkles, Save,
-  LayoutDashboard, CheckSquare, Users, Settings, Zap,
-  Kanban as KanbanIcon, Table as TableIcon, Filter,
-  ArrowUpDown, ArrowUp, ArrowDown, Search, CheckCircle2, CopyPlus, Archive, Trash2, Maximize2,
-  Bell, Mail, PieChart, TrendingUp, AlertTriangle, Wallet, ArrowRight, Pencil, Link,
-  FileText, User, List as ListIcon, Layout, Globe, Copy, Briefcase, Calendar
+  X, Share2, MoreHorizontal, List as ListIcon, ChevronDown, Check, Plus, 
+  Bot, MessageCircle, Phone, Repeat, History as HistoryIcon, 
+  Kanban as KanbanIcon, Table as TableIcon, Calendar, Filter,
+  LayoutDashboard, CheckSquare, Users, Settings, Zap, Briefcase,
+  ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
+  Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet
 } from 'lucide-react';
 
 // --- Types ---
@@ -23,16 +21,8 @@ interface Subtask {
   completed: boolean;
 }
 
-interface AiHistoryItem {
-  id: string;
-  timestamp: string;
-  status: 'success' | 'failure' | 'pending' | 'neutral';
-  action: string;
-  details: string;
-}
-
 interface AiChannelSettings {
-  triggers?: string[];
+  triggers: string[];
   custom?: {
     date?: string;
     time?: string;
@@ -40,26 +30,33 @@ interface AiChannelSettings {
   };
 }
 
+interface AiHistoryItem {
+  id?: string;
+  action: string;
+  timestamp: string | number;
+  status: 'success' | 'failure' | 'pending' | 'neutral';
+  details: string;
+}
+
 export interface Task {
   id: string;
-  projectId?: string; 
+  projectId?: string;
   title: string;
   status: string;
   priority: string;
-  assignee: string; 
-  assignmentType?: 'Self' | 'Contact' | 'Team' | 'Unknown';
+  assignee: string;
+  assignmentType: string;
   dueDate: string;
-  dueTime?: string;
+  dueTime: string;
   description: string;
   tags: string[];
   subtasks: Subtask[];
-  dependencies: string[];
+  dependencies: any[];
   recurrence: {
     enabled: boolean;
     frequency: string;
     interval: number;
     endDate?: string;
-    [key: string]: any;
   };
   aiCoordination: boolean;
   aiChannels: {
@@ -68,7 +65,6 @@ export interface Task {
     voice: boolean;
     whatsappSettings?: AiChannelSettings;
     voiceSettings?: AiChannelSettings;
-    [key: string]: any;
   };
   aiHistory: AiHistoryItem[];
   budget: {
@@ -77,7 +73,6 @@ export interface Task {
     advance: number;
     status: string;
     paymentDueDate: string;
-    [key: string]: any;
   };
   list: string;
 }
@@ -322,281 +317,122 @@ const calculateRiskMetrics = (project: Project, tasks: Task[]) => {
   return { level, overdueCount: overdueTasks.length, atRiskCount: atRiskTasks.length, budgetUsage };
 };
 
-// --- Components ---
-
-const SidebarItem = ({ 
-  icon: Icon, 
-  label, 
-  active, 
-  onClick 
-}: { 
-  icon: any, 
-  label: string, 
-  active: boolean, 
-  onClick: () => void 
-}) => (
-  <button 
-    onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-      active 
-        ? 'bg-primary text-white shadow-lg shadow-primary/30' 
-        : 'text-slate-500 hover:bg-white hover:text-primary'
-    }`}
-  >
-    <Icon size={20} className={active ? 'text-white' : 'text-slate-400 group-hover:text-primary'} />
-    {label && <span className="font-medium text-sm truncate">{label}</span>}
-  </button>
-);
-
-const CustomDatePicker = ({ 
-  value, 
-  onChange, 
-  label, 
-  className,
-  compact = false,
-  minDate,
-  maxDate
-}: { 
-  value: string, 
-  onChange: (val: string) => void, 
-  label?: string, 
-  className?: string,
-  compact?: boolean,
-  minDate?: string,
-  maxDate?: string
-}) => {
+// Components
+const CustomDatePicker = ({ value, onChange, compact, label, className, minDate, maxDate }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   
-  const dateValue = value ? new Date(value) : new Date();
-  const safeDate = isNaN(dateValue.getTime()) ? new Date() : dateValue;
-  const [viewDate, setViewDate] = useState(safeDate);
-
-  useEffect(() => {
-    if (isOpen && value) {
-        const d = new Date(value);
-        if (!isNaN(d.getTime())) setViewDate(d);
-    }
-  }, [isOpen, value]);
-
-  useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const screenH = window.innerHeight;
-      const spaceBelow = screenH - rect.bottom;
-      const top = spaceBelow < 300 ? rect.top - 280 : rect.bottom + 5;
-      setDropdownPos({ top, left: rect.left });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    const handleScroll = () => { if(isOpen) setIsOpen(false); }
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-    };
-  }, [isOpen]);
-
-  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
-
-  const handleDayClick = (day: number) => {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const newDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    if (minDate && newDateStr < minDate) return;
-    if (maxDate && newDateStr > maxDate) return;
-    onChange(newDateStr);
-    setIsOpen(false);
-  };
-
-  const changeMonth = (offset: number) => {
-    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1));
-  };
-
-  const daysInMonth = getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth());
-  const firstDay = getFirstDayOfMonth(viewDate.getFullYear(), viewDate.getMonth());
-  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const emptyDays = Array.from({ length: firstDay }, (_, i) => i);
-  const monthName = viewDate.toLocaleString('default', { month: 'long' });
-
-  return (
-     <div className={`relative ${className || ''}`} ref={containerRef}>
-        {label && <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">{label}</label>}
-        <button 
-            onClick={() => setIsOpen(!isOpen)} 
-            className={`flex items-center w-full text-left transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${compact ? 'bg-transparent text-xs text-slate-600 font-medium py-1 hover:text-primary' : 'px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium bg-white hover:border-primary text-slate-700'}`}
-        >
-           {!compact && <Calendar size={16} className="mr-2 text-slate-400" />}
-           <span className={`${!value && 'text-slate-400'}`}>{value ? formatDateDisplay(value) : 'Select Date'}</span>
-        </button>
-        {isOpen && (
-           <div 
-             className="fixed z-[9999] bg-white shadow-2xl border border-slate-100 p-4 w-72 rounded-2xl animate-in fade-in zoom-in-95 duration-200"
-             style={{ top: dropdownPos.top, left: dropdownPos.left }}
-           >
-              <div className="flex justify-between items-center mb-4">
-                  <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft size={18}/></button>
-                  <span className="text-sm font-bold text-slate-800">{monthName} {viewDate.getFullYear()}</span>
-                  <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500"><ChevronRight size={18}/></button>
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                  {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <div key={d} className="text-[10px] font-bold text-slate-400 uppercase">{d}</div>)}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                  {emptyDays.map(d => <div key={`empty-${d}`} />)}
-                  {daysArray.map(day => {
-                      const currentDayStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                      const isDisabled = (minDate && currentDayStr < minDate) || (maxDate && currentDayStr > maxDate);
-                      const isSelected = value === currentDayStr;
-                      const isToday = new Date().toISOString().split('T')[0] === currentDayStr;
-                      return (
-                          <button 
-                            key={day} 
-                            onClick={() => !isDisabled && handleDayClick(day)}
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all 
-                              ${isDisabled ? 'text-slate-300 cursor-not-allowed' : 
-                                isSelected ? 'bg-primary text-white shadow-md shadow-primary/30' : 
-                                isToday ? 'bg-slate-100 text-primary font-bold' : 
-                                'text-slate-600 hover:bg-slate-100'}`}
-                          >
-                              {day}
-                          </button>
-                      );
-                  })}
-              </div>
-              <div className="mt-3 pt-3 border-t border-slate-50 flex justify-between items-center">
-                  <button onClick={() => { onChange(new Date().toISOString().split('T')[0]); setIsOpen(false); }} className="text-[10px] font-bold text-primary hover:underline">Today</button>
-                  <button onClick={() => { onChange(''); setIsOpen(false); }} className="text-[10px] text-slate-400 hover:text-slate-600">Clear</button>
-              </div>
-           </div>
-        )}
-     </div>
-  );
-};
-
-const CustomTimePicker = ({ value, onChange, label, className, compact = false }: { value: string, onChange: (val: string) => void, label?: string, className?: string, compact?: boolean }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
-
-    useEffect(() => {
-      if (isOpen && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const screenH = window.innerHeight;
-        const spaceBelow = screenH - rect.bottom;
-        const top = spaceBelow < 250 ? rect.top - 200 : rect.bottom + 5;
-        setDropdownPos({ top, left: rect.left });
-      }
-    }, [isOpen]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(event.target as Node)) setIsOpen(false); };
-        const handleScroll = () => { if(isOpen) setIsOpen(false); }
-        document.addEventListener('mousedown', handleClickOutside);
-        window.addEventListener('scroll', handleScroll, true);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-            window.removeEventListener('scroll', handleScroll, true);
-        };
-    }, [isOpen]);
-
-    const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-    const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
-    
-    return (
-        <div className={`relative ${className || ''}`} ref={containerRef}>
-            {label && <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">{label}</label>}
-            <button onClick={() => setIsOpen(!isOpen)} className={`flex items-center w-full text-left transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${compact ? 'bg-transparent text-[10px] text-slate-400 hover:text-primary py-1' : 'px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium bg-white hover:border-primary text-slate-700'}`}>
-               {!compact && <Clock size={16} className="mr-2 text-slate-400" />}<span className={`${!value && 'text-slate-400'}`}>{value || (compact ? '--:--' : 'Select Time')}</span>
-            </button>
-            {isOpen && (
-                <div 
-                  className="fixed z-[9999] bg-white shadow-2xl border border-slate-100 p-2 w-48 rounded-2xl flex gap-2 h-48 animate-in fade-in zoom-in-95 duration-200"
-                  style={{ top: dropdownPos.top, left: dropdownPos.left }}
-                >
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        <div className="text-[10px] font-bold text-slate-400 text-center mb-1 sticky top-0 bg-white/90 backdrop-blur-sm py-1">HR</div>
-                        {hours.map(h => (
-                            <button key={h} onClick={() => onChange(`${h}:${value ? value.split(':')[1] || '00' : '00'}`)} className={`w-full py-1.5 text-xs rounded-lg hover:bg-slate-50 mb-0.5 transition-colors ${value?.startsWith(h) ? 'bg-primary text-white font-bold shadow-md shadow-primary/20 hover:bg-primary' : 'text-slate-600'}`}>
-                                {h}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="w-px bg-slate-100 my-2" />
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        <div className="text-[10px] font-bold text-slate-400 text-center mb-1 sticky top-0 bg-white/90 backdrop-blur-sm py-1">MIN</div>
-                        {minutes.map(m => (
-                            <button key={m} onClick={() => onChange(`${value ? value.split(':')[0] || '09' : '09'}:${m}`)} className={`w-full py-1.5 text-xs rounded-lg hover:bg-slate-50 mb-0.5 transition-colors ${value?.endsWith(m) ? 'bg-primary text-white font-bold shadow-md shadow-primary/20 hover:bg-primary' : 'text-slate-600'}`}>
-                                {m}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const Toggle = ({ enabled, onToggle, size }: { enabled: boolean; onToggle: () => void; size?: string }) => (
-  <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className={`relative inline-flex items-center rounded-full transition-colors focus:outline-none ${enabled ? 'bg-primary' : 'bg-slate-300'} ${size === 'sm' ? 'h-5 w-9' : 'h-6 w-11'}`}><span className={`${enabled ? 'translate-x-5' : 'translate-x-1'} inline-block transform rounded-full bg-white transition-transform ${size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'}`} /></button>
-);
-
-const MultiSelectDropdown = ({ options, selected, onChange, label }: { options: string[]; selected: string[]; onChange: (val: string[]) => void, label: string }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(event.target as Node)) setIsOpen(false); };
     if(isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const toggleOption = (option: string) => {
-    if (selected.includes(option)) onChange(selected.filter(s => s !== option));
-    else onChange([...selected, option]);
-  };
-
   return (
-    <div className="relative" ref={containerRef}>
-        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{label}</label>
-        <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 hover:border-slate-300">
-            <span className="truncate">{selected.length > 0 ? `${selected.length} selected` : 'Select triggers...'}</span>
-            <ChevronDown size={14} className="text-slate-400" />
-        </button>
+    <div className={className} ref={containerRef}>
+        {label && <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>}
+        <div onClick={() => setIsOpen(!isOpen)} className={`flex items-center w-full bg-white text-xs border border-slate-200 rounded-lg px-2 py-1.5 cursor-pointer ${compact ? 'text-xs' : 'text-sm'}`}>
+            <Calendar size={14} className="mr-2 text-slate-400"/>
+            {value ? formatDateDisplay(value) : 'Select Date'}
+        </div>
         {isOpen && (
-            <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                {options.map(option => (
-                    <div key={option} onClick={() => toggleOption(option)} className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center mr-2 transition-colors ${selected.includes(option) ? 'bg-primary border-primary' : 'border-slate-300'}`}>
-                            {selected.includes(option) && <Check size={10} className="text-white" />}
-                        </div>
-                        <span className="text-xs text-slate-700">{option}</span>
-                    </div>
-                ))}
-            </div>
-        )}
-        {selected.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-                {selected.map(s => (
-                    <span key={s} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                        {s} <button onClick={() => toggleOption(s)} className="ml-1 text-slate-400 hover:text-slate-600"><X size={10} /></button>
-                    </span>
-                ))}
+            <div className="absolute z-50 bg-white shadow-xl border border-slate-100 p-2 rounded-xl mt-1">
+                <input 
+                    type="date" 
+                    value={value} 
+                    onChange={(e) => { onChange(e.target.value); setIsOpen(false); }}
+                    min={minDate}
+                    max={maxDate}
+                    className="p-1 border border-slate-200 rounded"
+                />
             </div>
         )}
     </div>
   );
 };
+
+const CustomTimePicker = ({ value, onChange, compact, label, className }: any) => (
+  <div className={className}>
+    {label && <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>}
+    <input 
+      type="time" 
+      value={value} 
+      onChange={(e) => onChange(e.target.value)} 
+      className={`w-full bg-white text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary ${compact ? 'text-xs' : 'text-sm'}`} 
+    />
+  </div>
+);
+
+const Toggle = ({ enabled, onToggle, size }: any) => (
+  <button 
+    onClick={onToggle} 
+    className={`${size === 'sm' ? 'w-8 h-4' : 'w-11 h-6'} rounded-full transition-colors relative ${enabled ? 'bg-primary' : 'bg-slate-300'}`}
+  >
+    <div className={`absolute top-0.5 left-0.5 bg-white rounded-full shadow transition-transform ${size === 'sm' ? 'w-3 h-3' : 'w-5 h-5'} ${enabled ? (size === 'sm' ? 'translate-x-4' : 'translate-x-5') : 'translate-x-0'}`} />
+  </button>
+);
+
+const ActionMenu = ({ isOpen, onClose, onShare, onClone, onArchive, onDelete }: any) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose(); };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose]);
+  
+  if (!isOpen) return null;
+  return (
+    <div ref={menuRef} className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <button onClick={() => { onShare(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><Share2 size={16} /> Share Task</button>
+        <button onClick={() => { onClone(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><CopyPlus size={16} /> Clone Task</button>
+        <div className="h-px bg-slate-100 my-1" />
+        <button onClick={() => { onArchive(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"><Archive size={16} /> Archive</button>
+        <button onClick={() => { onDelete(); onClose(); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={16} /> Delete</button>
+    </div>
+  );
+};
+
+const MultiSelectDropdown = ({ label, options, selected, onChange }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setIsOpen(false); };
+        if(isOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    return (
+        <div className="relative" ref={ref}>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full min-h-[32px] bg-white border border-slate-200 rounded-lg px-2 py-1.5 cursor-pointer flex flex-wrap gap-1"
+            >
+                {selected.length === 0 && <span className="text-slate-400 text-xs">Select...</span>}
+                {selected.map((s: string) => (
+                    <span key={s} className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100">{s}</span>
+                ))}
+            </div>
+            {isOpen && (
+                <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                    {options.map((opt: string) => (
+                        <div 
+                            key={opt} 
+                            onClick={() => {
+                                if (selected.includes(opt)) onChange(selected.filter((s: string) => s !== opt));
+                                else onChange([...selected, opt]);
+                            }}
+                            className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between hover:bg-slate-50 ${selected.includes(opt) ? 'text-indigo-600 font-bold bg-indigo-50' : 'text-slate-600'}`}
+                        >
+                            {opt}
+                            {selected.includes(opt) && <Check size={12} />}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 const SectionHeader = ({ title, subtitle, action }: any) => (
   <div className="flex justify-between items-end mb-6">
@@ -608,69 +444,86 @@ const SectionHeader = ({ title, subtitle, action }: any) => (
   </div>
 );
 
-const ActionMenu = ({ onShare, onClone, onArchive, onDelete, isOpen, onClose }: any) => {
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose(); };
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, onClose]);
-  if (!isOpen) return null;
-  return (
-    <div ref={menuRef} className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-      <div className="py-1">
-        <button onClick={() => { onShare(); onClose(); }} className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"><Share2 size={16} className="mr-2 text-slate-400" /> Share</button>
-        <button onClick={() => { onClone(); onClose(); }} className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"><CopyPlus size={16} className="mr-2 text-slate-400" /> Clone</button>
-        <button onClick={() => { onArchive(); onClose(); }} className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"><Archive size={16} className="mr-2 text-slate-400" /> Archive</button>
-        <div className="h-px bg-slate-100 my-1" />
-        <button onClick={() => { onDelete(); onClose(); }} className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"><Trash2 size={16} className="mr-2" /> Delete</button>
-      </div>
-    </div>
-  );
-};
-
-const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
-  const [formData, setFormData] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' });
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  if (!isOpen) return null;
-  const handleSubmit = () => {
-    if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
-        alert('End date cannot be earlier than start date.');
-        return;
-    }
-    setIsAiLoading(true);
-    setTimeout(() => { onSubmit(formData); setIsAiLoading(false); onClose(); setFormData({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' }); }, 1500);
-  };
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><div><h2 className="text-lg font-bold text-slate-900">New Project</h2><p className="text-xs text-slate-500">Define goals for the AI Planning Coach</p></div><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
-            <div className="p-6 space-y-4">
-               {isAiLoading ? (
-                   <div className="flex flex-col items-center justify-center py-10 space-y-4"><div className="w-16 h-16 relative"><div className="absolute inset-0 rounded-full border-4 border-slate-100"></div><div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div><Bot className="absolute inset-0 m-auto text-primary" size={24}/></div><div className="text-center"><h3 className="text-sm font-bold text-slate-800">AI Planning Coach is working...</h3><p className="text-xs text-slate-500 mt-1">Generating tasks, budget breakdown, and timeline.</p></div></div>
-               ) : (
-                   <>
-                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="e.g. Summer Marketing Campaign" autoFocus /></div>
-                        <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><div className="relative"><span className="absolute left-3 top-2 text-slate-400 text-sm">$</span><input type="number" value={formData.budget || ''} onChange={e => setFormData({...formData, budget: parseFloat(e.target.value) || 0})} className="w-full pl-6 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0.00" /></div></div></div>
-                        <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={val => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={val => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
-                        <div className="pt-2 border-t border-slate-100 mt-2">
-                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Client Details (Optional)</div>
-                             <div className="grid grid-cols-1 gap-3">
-                                 <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Client Name" /></div>
-                                 <div className="grid grid-cols-2 gap-3">
-                                     <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
-                                     <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Phone Number" />
-                                 </div>
-                             </div>
-                        </div>
-                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 mt-2">Description</label><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Describe the goals and scope..." /></div>
-                   </>
-               )}
-            </div>
-            {!isAiLoading && (<div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleSubmit} disabled={!formData.title} className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"><Sparkles size={16} /><span>Start Planning Coach</span></button></div>)}
+const KanbanColumn = ({ list, count, tasks, onDrop, onDragStart, onEditTask, onNewTask }: any) => (
+  <div 
+    className="flex flex-col h-full w-80 bg-slate-50/50 rounded-2xl border border-slate-200/60"
+    onDragOver={(e) => e.preventDefault()}
+    onDrop={(e) => onDrop(e, list)}
+  >
+    <div className="p-3 flex items-center justify-between border-b border-slate-100">
+        <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-700 text-sm">{list}</h3>
+            <span className="bg-slate-200/60 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{count}</span>
         </div>
+        <button onClick={onNewTask} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
     </div>
-  );
+    <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+        {tasks.filter((t: any) => (t.list || 'General') === list).map((t: any) => (
+             <div 
+                key={t.id} 
+                draggable 
+                onDragStart={(e) => onDragStart(e, t.id)}
+                onClick={() => onEditTask(t)}
+                className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative"
+             >
+                <div className="flex justify-between items-start mb-1">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${t.priority === 'Urgent' ? 'bg-red-50 text-red-600' : t.priority === 'High' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{t.priority}</span>
+                    {t.aiCoordination && <Bot size={12} className="text-purple-500" />}
+                </div>
+                <h4 className="text-sm font-bold text-slate-700 mb-1 leading-snug">{t.title}</h4>
+                <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                    <Calendar size={10} />
+                    <span>{new Date(t.dueDate).toLocaleDateString()}</span>
+                </div>
+             </div>
+        ))}
+    </div>
+  </div>
+);
+
+const CalendarBoard = ({ tasks, onEditTask, onNewTaskWithDate }: any) => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    // Simplified calendar view for the prototype
+    return (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-slate-100">
+                {days.map(d => <div key={d} className="py-2 text-center text-xs font-bold text-slate-500 uppercase">{d}</div>)}
+            </div>
+            <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-y-auto">
+                 {Array.from({length: 35}).map((_, i) => {
+                     const date = new Date();
+                     date.setDate(date.getDate() - date.getDay() + i); 
+                     const dateStr = date.toISOString().split('T')[0];
+                     const dayTasks = tasks.filter((t: any) => t.dueDate === dateStr);
+                     const isToday = dateStr === today.toISOString().split('T')[0];
+                     
+                     return (
+                        <div 
+                            key={i} 
+                            onClick={() => onNewTaskWithDate(dateStr)}
+                            className={`border-b border-r border-slate-50 p-1 min-h-[100px] hover:bg-slate-50 transition-colors cursor-pointer group relative ${isToday ? 'bg-blue-50/30' : ''}`}
+                        >
+                            <span className={`text-xs font-bold p-1 rounded-full w-6 h-6 flex items-center justify-center ${isToday ? 'bg-blue-600 text-white' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                                {date.getDate()}
+                            </span>
+                            <div className="mt-1 space-y-1">
+                                {dayTasks.map((t: any) => (
+                                    <div 
+                                        key={t.id} 
+                                        onClick={(e) => { e.stopPropagation(); onEditTask(t); }}
+                                        className={`text-[10px] px-1.5 py-1 rounded border truncate ${t.status === 'Done' ? 'bg-slate-100 text-slate-400 line-through border-slate-200' : 'bg-white border-blue-100 text-blue-700 shadow-sm'}`}
+                                    >
+                                        {t.title}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                     );
+                 })}
+            </div>
+        </div>
+    );
 };
 
 const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate, projectId, availableTasks = [], projects = [] }: any) => {
@@ -680,7 +533,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   const [newListName, setNewListName] = useState('');
   const [isTagInputVisible, setIsTagInputVisible] = useState(false);
   const [tagInputValue, setTagInputValue] = useState('');
-  const [isDependencyPickerOpen, setIsDependencyPickerOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const listDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => { if (task) setFormData(task); else setFormData({ id: Date.now().toString(), projectId: projectId, title: '', status: 'Todo', priority: 'Medium', assignee: 'Me', assignmentType: 'Self', dueDate: initialDate || new Date().toISOString().split('T')[0], dueTime: '', description: '', tags: [], subtasks: [], dependencies: [], recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }, aiCoordination: false, aiChannels: { whatsapp: true, email: false, voice: false }, aiHistory: [], budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, list: 'General' }); }, [task, isOpen, initialDate, projectId]);
@@ -698,7 +551,6 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
 
   const updateField = (field: keyof Task, value: any) => setFormData(prev => ({ ...prev, [field]: value }));
   
-  // Auto-categorize list based on title keywords
   const autoCategorizeList = () => {
     if (formData.list && formData.list !== 'General') return;
     const lowerTitle = formData.title.toLowerCase();
@@ -709,27 +561,18 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
     else if (/design|ui|ux|logo|mockup/.test(lowerTitle)) detected = 'Design';
     else if (/hire|interview|onboard|candidate/.test(lowerTitle)) detected = 'HR';
     else if (/budget|invoice|cost|pay/.test(lowerTitle)) detected = 'Finance';
-    
     if (detected !== 'General') updateField('list', detected);
   };
 
-  // Auto-generate tags based on description keywords and hashtags
   const autoGenerateTags = () => {
     const desc = formData.description;
     if (!desc) return;
     const existing = new Set(formData.tags || []);
-    
-    // Explicit hashtags
     const matches = desc.match(/#[a-z0-9_]+/gi);
     if (matches) matches.forEach(t => existing.add(t));
-    
-    // Keywords
     const lowerDesc = desc.toLowerCase();
     const map: any = { 'urgent': '#urgent', 'deadline': '#deadline', 'meeting': '#meeting', 'follow up': '#followup', 'review': '#review' };
-    Object.keys(map).forEach(k => {
-        if (lowerDesc.includes(k)) existing.add(map[k]);
-    });
-    
+    Object.keys(map).forEach(k => { if (lowerDesc.includes(k)) existing.add(map[k]); });
     updateField('tags', Array.from(existing));
   };
 
@@ -744,9 +587,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
     setIsTagInputVisible(false);
   };
 
-  const removeTag = (tag: string) => {
-    updateField('tags', (formData.tags || []).filter(t => t !== tag));
-  };
+  const removeTag = (tag: string) => { updateField('tags', (formData.tags || []).filter(t => t !== tag)); };
 
   const handleCreateNewList = () => {
     if (newListName.trim()) {
@@ -762,31 +603,16 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
 
   const renderCustomSchedule = (channel: 'whatsapp' | 'voice', settings: AiChannelSettings | undefined, updateSettings: (s: AiChannelSettings) => void) => {
     if (!settings?.triggers?.includes('custom schedule')) return null;
-    
     return (
         <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 animate-in fade-in slide-in-from-top-1">
              <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Custom Schedule</div>
              <div className="grid grid-cols-2 gap-2">
-                 <CustomDatePicker 
-                    value={settings.custom?.date || ''} 
-                    onChange={(val) => updateSettings({...settings, custom: {...settings.custom, date: val}})} 
-                    compact 
-                    label="Date"
-                 />
-                 <CustomTimePicker 
-                    value={settings.custom?.time || ''} 
-                    onChange={(val) => updateSettings({...settings, custom: {...settings.custom, time: val}})} 
-                    compact 
-                    label="Time"
-                 />
+                 <CustomDatePicker value={settings.custom?.date || ''} onChange={(val: any) => updateSettings({...settings, custom: {...settings.custom, date: val}} as any)} compact label="Date" />
+                 <CustomTimePicker value={settings.custom?.time || ''} onChange={(val: any) => updateSettings({...settings, custom: {...settings.custom, time: val}} as any)} compact label="Time" />
              </div>
              <div className="mt-2">
                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Frequency</label>
-                 <select 
-                    value={settings.custom?.frequency || ''} 
-                    onChange={(e) => updateSettings({...settings, custom: {...settings.custom, frequency: e.target.value}})}
-                    className="w-full bg-white text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary"
-                 >
+                 <select value={settings.custom?.frequency || ''} onChange={(e) => updateSettings({...settings, custom: {...settings.custom, frequency: e.target.value}} as any)} className="w-full bg-white text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary">
                      <option value="Once">Once</option>
                      <option value="Daily">Daily</option>
                      <option value="Weekly">Weekly</option>
@@ -802,8 +628,19 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
       <div className="w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto flex flex-col animate-in slide-in-from-right duration-300 relative">
         <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-20 border-b border-slate-100">
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
                 <button onClick={() => onAction?.('share', formData)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><Share2 size={20} /></button>
+                <div className="relative">
+                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><MoreHorizontal size={20} /></button>
+                    <ActionMenu 
+                        isOpen={isMenuOpen} 
+                        onClose={() => setIsMenuOpen(false)}
+                        onShare={() => onAction?.('share', formData)}
+                        onClone={() => onAction?.('clone', formData)}
+                        onArchive={() => onAction?.('archive', formData)}
+                        onDelete={() => onAction?.('delete', formData)}
+                    />
+                </div>
                 <button onClick={() => onSave({...formData, status: 'Draft'})} className="px-4 py-1.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors">Save Draft</button>
                 <button onClick={() => onSave(formData)} className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-colors">Save</button>
             </div>
@@ -915,7 +752,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
             </div>
 
             <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-4">
-                <div className="flex gap-3"><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Assignee</label><select value={formData.assignee} onChange={(e) => updateField('assignee', e.target.value)} className="w-full bg-slate-50 p-2 rounded-lg text-sm"><option value="Me">Me</option><option value="AI Agent">AI Agent</option><option value="Team">Team</option></select></div><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Due Date</label><div className="flex gap-2"><CustomDatePicker value={formData.dueDate} onChange={(val) => updateField('dueDate', val)} compact className="flex-1" /><CustomTimePicker value={formData.dueTime || ''} onChange={(val) => updateField('dueTime', val)} compact className="w-20" /></div></div></div>
+                <div className="flex gap-3"><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Assignee</label><select value={formData.assignee} onChange={(e) => updateField('assignee', e.target.value)} className="w-full bg-slate-50 p-2 rounded-lg text-sm"><option value="Me">Me</option><option value="AI Agent">AI Agent</option><option value="Team">Team</option></select></div><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Due Date</label><div className="flex gap-2"><CustomDatePicker value={formData.dueDate} onChange={(val: any) => updateField('dueDate', val)} compact className="flex-1" /><CustomTimePicker value={formData.dueTime || ''} onChange={(val: any) => updateField('dueTime', val)} compact className="w-20" /></div></div></div>
                 <div><label className="block text-xs font-bold text-slate-500 mb-2">Priority</label><div className="flex gap-2">{['Low', 'Medium', 'High', 'Urgent'].map(p => (<button key={p} onClick={() => updateField('priority', p)} className={`flex-1 py-2 rounded-lg border text-xs font-bold ${formData.priority === p ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-slate-100 text-slate-400'}`}>{p}</button>))}</div></div>
                 
                 <div><div className="flex justify-between mb-2"><h3 className="font-bold text-sm">Subtasks</h3><span className="text-xs bg-slate-100 px-2 py-1 rounded-full">{formData.subtasks?.filter(s => s.completed).length || 0}/{formData.subtasks?.length || 0}</span></div><div className="space-y-2">{formData.subtasks?.map(st => (<div key={st.id} className="flex gap-2"><input type="checkbox" checked={st.completed} onChange={() => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, completed: !s.completed} : s); updateField('subtasks', newSt); }} /><input value={st.text} onChange={(e) => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, text: e.target.value} : s); updateField('subtasks', newSt); }} className="flex-1 bg-transparent text-sm border-none p-0 focus:ring-0" /></div>))}</div><button onClick={() => updateField('subtasks', [...(formData.subtasks || []), {id: Date.now().toString(), text: '', completed: false}])} className="text-primary text-sm font-bold mt-2">+ Add Subtask</button></div>
@@ -923,7 +760,6 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                 <div className="flex justify-between items-center"><div className="flex items-center gap-2"><Bot size={18} className="text-purple-500"/><span className="text-sm font-bold">AI Coordination</span></div><Toggle enabled={formData.aiCoordination} onToggle={() => updateField('aiCoordination', !formData.aiCoordination)} size="sm" /></div>
                 {formData.aiCoordination && (
                     <div className="space-y-3 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
-                        
                         <div className={`p-3 rounded-xl border transition-all duration-200 ${formData.aiChannels.whatsapp ? 'bg-green-50/50 border-green-200' : 'bg-slate-50 border-slate-100'}`}>
                             <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
@@ -934,20 +770,13 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                                 </div>
                                 <Toggle enabled={formData.aiChannels.whatsapp} onToggle={() => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsapp: !p.aiChannels.whatsapp}}))} size="sm"/>
                             </div>
-                            
                             {formData.aiChannels.whatsapp && (
                                 <div className="pl-9">
-                                    <MultiSelectDropdown 
-                                        label="Trigger Events"
-                                        options={WHATSAPP_TRIGGERS} 
-                                        selected={formData.aiChannels.whatsappSettings?.triggers || []} 
-                                        onChange={(triggers) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsappSettings: {...p.aiChannels.whatsappSettings, triggers}}}))} 
-                                    />
+                                    <MultiSelectDropdown label="Trigger Events" options={WHATSAPP_TRIGGERS} selected={formData.aiChannels.whatsappSettings?.triggers || []} onChange={(triggers: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsappSettings: {...p.aiChannels.whatsappSettings, triggers}}}))} />
                                     {renderCustomSchedule('whatsapp', formData.aiChannels.whatsappSettings, (s) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsappSettings: s}})))}
                                 </div>
                             )}
                         </div>
-
                         <div className={`p-3 rounded-xl border transition-all duration-200 ${formData.aiChannels.voice ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-50 border-slate-100'}`}>
                             <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
@@ -958,20 +787,13 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                                 </div>
                                 <Toggle enabled={formData.aiChannels.voice} onToggle={() => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voice: !p.aiChannels.voice}}))} size="sm"/>
                             </div>
-                            
                             {formData.aiChannels.voice && (
                                 <div className="pl-9">
-                                    <MultiSelectDropdown 
-                                        label="Call Triggers"
-                                        options={VOICE_TRIGGERS} 
-                                        selected={formData.aiChannels.voiceSettings?.triggers || []} 
-                                        onChange={(triggers) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voiceSettings: {...p.aiChannels.voiceSettings, triggers}}}))} 
-                                    />
+                                    <MultiSelectDropdown label="Call Triggers" options={VOICE_TRIGGERS} selected={formData.aiChannels.voiceSettings?.triggers || []} onChange={(triggers: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voiceSettings: {...p.aiChannels.voiceSettings, triggers}}}))} />
                                     {renderCustomSchedule('voice', formData.aiChannels.voiceSettings, (s) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voiceSettings: s}})))}
                                 </div>
                             )}
                         </div>
-
                     </div>
                 )}
                 
@@ -1000,7 +822,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                         </div>
                         <div>
                              <label className="block text-[10px] font-bold text-blue-900/60 uppercase mb-1">End Date (Optional)</label>
-                             <CustomDatePicker value={formData.recurrence.endDate || ''} onChange={(val) => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, endDate: val}}))} compact className="w-full" />
+                             <CustomDatePicker value={formData.recurrence.endDate || ''} onChange={(val: any) => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, endDate: val}}))} compact className="w-full" />
                         </div>
                     </div>
                 )}
@@ -1030,145 +852,6 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
             </div>
         </main>
       </div>
-    </div>
-  );
-};
-
-const KanbanColumn: React.FC<{ list: string, count: number, tasks: Task[], onDragOver: any, onDrop: any, onDragStart: any, onEditTask: any, onNewTask: any }> = ({ list, count, tasks, onDragOver, onDrop, onDragStart, onEditTask, onNewTask }) => {
-  const columnTasks = tasks.filter((t: Task) => (t.list || 'General') === list);
-  const getPriorityColor = (p: string) => { switch(p) { case 'Urgent': return 'border-l-red-500'; case 'High': return 'border-l-orange-500'; default: return 'border-l-slate-200'; } };
-  return (
-    <div className="flex-shrink-0 w-80 bg-slate-50/50 rounded-2xl border border-slate-100 flex flex-col max-h-full" onDragOver={onDragOver} onDrop={(e) => onDrop(e, list)}>
-      <div className="p-4 flex items-center justify-between border-b border-slate-100"><div className="flex items-center space-x-2"><h4 className="font-bold text-sm text-slate-700">{list}</h4><span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{count}</span></div><button onClick={onNewTask} className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors"><Plus size={16} /></button></div>
-      <div className="p-3 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
-         {columnTasks.map((task: Task) => (
-           <div key={task.id} draggable onDragStart={(e) => onDragStart(e, task.id)} onClick={() => onEditTask(task)} className={`bg-white p-4 rounded-xl border border-slate-200 border-l-4 ${getPriorityColor(task.priority)} shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all`}>
-              <div className="flex flex-wrap gap-2 mb-2">{task.priority === 'Urgent' && <span className="px-2 py-1 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase">Urgent</span>}</div>
-              <h4 className="text-sm font-bold text-slate-800 mb-1 line-clamp-2">{task.title}</h4>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
-                  <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700">{task.assignee === 'Me' ? 'ME' : task.assignee.charAt(0)}</div><span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{task.status}</span></div>
-                  {task.dueDate && (
-                    <div className="text-right">
-                        <div className="text-xs text-slate-400 font-medium">{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
-                        {task.dueTime && <div className="text-[10px] text-slate-400 font-medium mt-0.5">{task.dueTime}</div>}
-                    </div>
-                  )}
-              </div>
-           </div>
-         ))}
-      </div>
-    </div>
-  );
-};
-
-const CalendarBoard = ({ tasks, onEditTask, onNewTaskWithDate }: any) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-
-  const getDaysArray = (year: number, month: number) => {
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay(); // 0 = Sunday
-
-    const days = [];
-    
-    // Previous month filler
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
-    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-        days.push({ date: null, dayNum: prevMonthLastDay - i, isCurrentMonth: false });
-    }
-    
-    // Current month
-    for (let i = 1; i <= daysInMonth; i++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-        days.push({ date: dateStr, dayNum: i, isCurrentMonth: true });
-    }
-    
-    // Next month filler
-    const remainingSlots = 42 - days.length; // 6 rows * 7 cols
-    for (let i = 1; i <= remainingSlots; i++) {
-        days.push({ date: null, dayNum: i, isCurrentMonth: false });
-    }
-    
-    return days;
-  };
-
-  const days = getDaysArray(currentDate.getFullYear(), currentDate.getMonth());
-  const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const today = () => setCurrentDate(new Date());
-
-  const getTasksForDate = (dateStr: string) => tasks.filter((t: Task) => t.dueDate === dateStr);
-
-  const priorityColor = (p: string) => {
-      switch(p) {
-          case 'Urgent': return 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200';
-          case 'High': return 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200';
-          case 'Medium': return 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200';
-          case 'Low': return 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200';
-          default: return 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200';
-      }
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100">
-            <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold text-slate-800">{monthName}</h2>
-                <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-                    <button onClick={prevMonth} className="p-1 hover:bg-white rounded-md text-slate-500 hover:text-slate-800 hover:shadow-sm transition-all"><ChevronLeft size={18}/></button>
-                    <button onClick={today} className="text-xs font-bold text-slate-600 px-3 hover:text-primary transition-colors">Today</button>
-                    <button onClick={nextMonth} className="p-1 hover:bg-white rounded-md text-slate-500 hover:text-slate-800 hover:shadow-sm transition-all"><ChevronRight size={18}/></button>
-                </div>
-            </div>
-        </div>
-        
-        <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/50">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                <div key={d} className="py-2 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">{d}</div>
-            ))}
-        </div>
-
-        <div className="grid grid-cols-7 flex-1 auto-rows-fr bg-slate-100/50 gap-px border-b border-slate-100">
-            {days.map((day, idx) => (
-                <div 
-                    key={idx} 
-                    className={`min-h-[100px] p-2 transition-colors relative group flex flex-col gap-1 ${day.isCurrentMonth ? 'bg-white hover:bg-slate-50/30' : 'bg-slate-50 text-slate-300'}`}
-                    onClick={() => day.isCurrentMonth && day.date && onNewTaskWithDate(day.date)}
-                >
-                    <div className="flex justify-between items-start">
-                        <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${day.date === new Date().toISOString().split('T')[0] ? 'bg-primary text-white shadow-md shadow-primary/30' : 'text-slate-500'}`}>
-                            {day.dayNum}
-                        </span>
-                    </div>
-                    
-                    {day.isCurrentMonth && day.date && (
-                        <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar max-h-[120px]">
-                            {getTasksForDate(day.date).map((t: Task) => (
-                                <div 
-                                    key={t.id}
-                                    onClick={(e) => { e.stopPropagation(); onEditTask(t); }}
-                                    className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shadow-sm ${priorityColor(t.priority)}`}
-                                >
-                                    <div className="flex items-center justify-between gap-1">
-                                        <span className="truncate">{t.title}</span>
-                                        {t.dueTime && <span className="opacity-75 text-[9px] whitespace-nowrap">{t.dueTime}</span>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    
-                    {day.isCurrentMonth && (
-                        <button className="absolute bottom-2 right-2 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-110 z-10">
-                            <Plus size={14} />
-                        </button>
-                    )}
-                </div>
-            ))}
-        </div>
     </div>
   );
 };
@@ -1239,9 +922,44 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
         onUpdateTask({ ...task, ...updates });
     };
 
+    const handleTaskAction = (action: string, task: Task) => {
+        switch (action) {
+            case 'share':
+                alert(`Sharing task: ${task.title}`);
+                break;
+            case 'clone':
+                const clonedTask = { ...task, id: Date.now().toString(), title: `${task.title} (Copy)`, status: 'Draft' };
+                onAddTask(clonedTask);
+                setEditingTask(clonedTask);
+                setIsModalOpen(true);
+                break;
+            case 'archive':
+                onUpdateTask({ ...task, status: 'Archived' });
+                setIsModalOpen(false);
+                break;
+            case 'delete':
+                if (confirm('Delete this task?')) {
+                    onDeleteTask(task.id);
+                    setIsModalOpen(false);
+                }
+                break;
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500 relative flex flex-col h-full">
-            <TaskDetailPanel isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={(t: Task) => { if(editingTask) onUpdateTask(t); else onAddTask(t); setIsModalOpen(false); }} task={editingTask} onAction={() => {}} projectId={projectId} availableTasks={tasks} projects={projects} initialDate={initialDate} />
+            <TaskDetailPanel 
+                isOpen={isModalOpen} 
+                onClose={() => setIsModalOpen(false)} 
+                onSave={(t: Task) => { if(editingTask) onUpdateTask(t); else onAddTask(t); setIsModalOpen(false); }} 
+                task={editingTask} 
+                onAction={handleTaskAction} 
+                projectId={projectId} 
+                availableTasks={tasks} 
+                projects={projects} 
+                initialDate={initialDate} 
+            />
+            
             <div className="flex justify-between items-center mb-2">
                 <div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center">
                     <button onClick={() => setViewMode('board')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'board' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><KanbanIcon size={14} className="mr-2" /> Board</button>
@@ -1423,88 +1141,47 @@ const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, 
     );
 };
 
-const LeadModal = ({ isOpen, onClose, lead, onSave }: { isOpen: boolean, onClose: () => void, lead: Lead | null, onSave: (lead: Lead) => void }) => {
-  const [formData, setFormData] = useState<Partial<Lead>>({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '' });
-  useEffect(() => { if (lead) setFormData(lead); else setFormData({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '', id: `LEAD-${Date.now()}`, lastContact: new Date().toISOString().split('T')[0] }); }, [lead, isOpen]);
+const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
+  const [formData, setFormData] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' });
+  const [isAiLoading, setIsAiLoading] = useState(false);
   if (!isOpen) return null;
+  const handleSubmit = () => {
+    if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
+        alert('End date cannot be earlier than start date.');
+        return;
+    }
+    setIsAiLoading(true);
+    setTimeout(() => { onSubmit(formData); setIsAiLoading(false); onClose(); setFormData({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' }); }, 1500);
+  };
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">{lead ? 'Edit Lead' : 'New Lead'}</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Name</label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" autoFocus /></div>
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Company</label><input type="text" value={formData.company} onChange={(e) => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
-          <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Value ($)</label><input type="number" value={formData.value} onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div></div>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><div><h2 className="text-lg font-bold text-slate-900">New Project</h2><p className="text-xs text-slate-500">Define goals for the AI Planning Coach</p></div><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
+            <div className="p-6 space-y-4">
+               {isAiLoading ? (
+                   <div className="flex flex-col items-center justify-center py-10 space-y-4"><div className="w-16 h-16 relative"><div className="absolute inset-0 rounded-full border-4 border-slate-100"></div><div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div><Bot className="absolute inset-0 m-auto text-primary" size={24}/></div><div className="text-center"><h3 className="text-sm font-bold text-slate-800">AI Planning Coach is working...</h3><p className="text-xs text-slate-500 mt-1">Generating tasks, budget breakdown, and timeline.</p></div></div>
+               ) : (
+                   <>
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="e.g. Summer Marketing Campaign" autoFocus /></div>
+                        <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><div className="relative"><span className="absolute left-3 top-2 text-slate-400 text-sm">$</span><input type="number" value={formData.budget || ''} onChange={e => setFormData({...formData, budget: parseFloat(e.target.value) || 0})} className="w-full pl-6 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0.00" /></div></div></div>
+                        <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
+                        <div className="pt-2 border-t border-slate-100 mt-2">
+                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Client Details (Optional)</div>
+                             <div className="grid grid-cols-1 gap-3">
+                                 <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Client Name" /></div>
+                                 <div className="grid grid-cols-2 gap-3">
+                                     <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
+                                     <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Phone Number" />
+                                 </div>
+                             </div>
+                        </div>
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 mt-2">Description</label><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Describe the goals and scope..." /></div>
+                   </>
+               )}
+            </div>
+            {!isAiLoading && (<div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleSubmit} disabled={!formData.title} className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"><Sparkles size={16} /><span>Start Planning Coach</span></button></div>)}
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={() => { onSave(formData as Lead); onClose(); }} disabled={!formData.name} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 transition-all">Save Lead</button></div>
-      </div>
     </div>
-  );
-};
-
-const LeadCard: React.FC<{ lead: Lead, onClick: () => void }> = ({ lead, onClick }) => (
-    <div onClick={onClick} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col gap-2 relative">
-      <div className="flex justify-between items-start"><h4 className="font-bold text-sm text-slate-800">{lead.name}</h4>{lead.probability > 70 && <span className="bg-orange-100 text-orange-600 p-1 rounded-full"><TrendingUp size={12} /></span>}</div>
-      <p className="text-xs text-slate-500">{lead.company}</p>
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50"><span className="text-xs font-bold text-slate-700">${lead.value.toLocaleString()}</span><span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{lead.source}</span></div>
-      <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mt-1"><div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${lead.probability}%` }} /></div>
-    </div>
-);
-
-const LeadKanbanColumn: React.FC<{ status: string, leads: Lead[], onEdit: (lead: Lead) => void }> = ({ status, leads, onEdit }) => (
-    <div className="flex-shrink-0 w-72 bg-slate-50/50 rounded-2xl border border-slate-100 flex flex-col max-h-full">
-      <div className="p-4 flex items-center justify-between border-b border-slate-100"><div className="flex items-center gap-2"><h4 className="font-bold text-sm text-slate-700">{status}</h4><span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{leads.length}</span></div><span className="text-[10px] text-slate-400 font-medium">${leads.reduce((sum, l) => sum + l.value, 0).toLocaleString()}</span></div>
-      <div className="p-3 space-y-3 overflow-y-auto flex-1 custom-scrollbar">{leads.map(lead => <LeadCard key={lead.id} lead={lead} onClick={() => onEdit(lead)} />)}</div>
-    </div>
-);
-
-const LeadsView = () => {
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const handleSaveLead = (lead: Lead) => { if (editingLead) setLeads(prev => prev.map(l => l.id === lead.id ? lead : l)); else setLeads(prev => [...prev, lead]); };
-  const handleDeleteLead = (id: string) => { if (confirm('Delete this lead?')) { setLeads(prev => prev.filter(l => l.id !== id)); setIsModalOpen(false); } };
-  const statuses = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
-
-  return (
-    <div className="h-full flex flex-col animate-in fade-in duration-500">
-      <LeadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} lead={editingLead} onSave={handleSaveLead} />
-      <SectionHeader title="Lead Management" subtitle="Track and convert potential clients" action={<div className="flex items-center gap-3"><div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center"><button onClick={() => setViewMode('board')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'board' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><KanbanIcon size={14} className="mr-2" /> Board</button><button onClick={() => setViewMode('list')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><ListIcon size={14} className="mr-2" /> List</button></div><button onClick={() => { setEditingLead(null); setIsModalOpen(true); }} className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-primary/20"><Plus size={16} className="mr-2" /> Add Lead</button></div>} />
-      {viewMode === 'board' ? <div className="flex-1 overflow-x-auto min-h-0 pb-4"><div className="flex space-x-4 h-full min-w-max px-2">{statuses.map(status => <LeadKanbanColumn key={status} status={status} leads={leads.filter(l => l.status === status)} onEdit={(l) => { setEditingLead(l); setIsModalOpen(true); }} />)}</div></div> : <div className="flex-1 overflow-y-auto custom-scrollbar bg-white rounded-2xl border border-slate-100 shadow-sm"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500 sticky top-0 z-10"><tr><th className="px-6 py-4">Name</th><th className="px-6 py-4">Company</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Value</th><th className="px-6 py-4"></th></tr></thead><tbody className="divide-y divide-slate-100">{leads.map(lead => (<tr key={lead.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}><td className="px-6 py-4 font-medium text-slate-900">{lead.name}</td><td className="px-6 py-4">{lead.company}</td><td className="px-6 py-4"><span className="px-2 py-1 rounded text-xs font-bold bg-blue-50 text-blue-600">{lead.status}</span></td><td className="px-6 py-4 font-mono text-slate-700">${lead.value.toLocaleString()}</td><td className="px-6 py-4 text-right"><button onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg"><Trash2 size={16} /></button></td></tr>))}</tbody></table></div>}
-    </div>
-  );
-};
-
-const ProjectCard = ({ project, onClick, onClone, onDelete, onUpdate }: any) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  
-  return (
-    <>
-      <div onClick={onClick} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col h-full relative overflow-visible">
-        <div className={`absolute top-0 left-0 w-1 h-full rounded-l-2xl ${project.status === 'Execution' ? 'bg-green-500' : project.status === 'Planning' ? 'bg-blue-500' : project.status === 'High Risk' ? 'bg-red-500' : 'bg-slate-300'}`} />
-        <div className="flex justify-between items-start mb-3 pl-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-slate-800 truncate text-base mb-1">{project.title}</h3>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wide">{project.category}</span>
-          </div>
-          <div className="relative">
-             <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} className={`p-1.5 rounded-lg transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600 opacity-0 group-hover:opacity-100'}`}><MoreHorizontal size={18} /></button>
-             <ActionMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onShare={() => setIsShareModalOpen(true)} onClone={onClone} onArchive={() => onUpdate({...project, status: 'Archived'})} onDelete={onDelete} />
-          </div>
-        </div>
-        <div className="flex-1 pl-3">
-          <p className="text-xs text-slate-500 line-clamp-2 mb-4 h-10">{project.description || 'No description provided.'}</p>
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2"><span>Progress</span><span className="font-bold text-slate-700">{project.progress}%</span></div>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4"><div className={`h-full rounded-full transition-all duration-500 ${project.riskLevel === 'High' ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${project.progress}%` }}></div></div>
-          <div className="flex justify-between items-center pt-3 border-t border-slate-50">
-             <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400" /><span className="text-xs font-medium text-slate-600">{formatDateDisplay(project.startDate)}</span></div>
-             {project.riskLevel && <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${project.riskLevel === 'High' ? 'bg-red-50 text-red-600' : project.riskLevel === 'Medium' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{project.riskLevel} Risk</div>}
-          </div>
-        </div>
-      </div>
-    </>
   );
 };
 
@@ -1530,7 +1207,7 @@ const EditProjectModal = ({ isOpen, onClose, project, onSave }: any) => {
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><input type="number" value={formData.budget.total} onChange={e => updateBudget(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div></div>
                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as ProjectStatus})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Draft', 'Planning', 'Ready', 'Execution', 'On Hold', 'Completed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Risk Level</label><select value={formData.riskLevel} onChange={e => setFormData({...formData, riskLevel: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Low', 'Medium', 'High'].map(r => <option key={r} value={r}>{r}</option>)}</select></div></div>
-                <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={val => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={val => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
+                <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
                 <div className="pt-2 border-t border-slate-100 mt-2">
                      <div className="text-xs font-bold text-slate-500 uppercase mb-2">Client Details (Optional)</div>
                      <div className="grid grid-cols-1 gap-3">
@@ -1607,6 +1284,100 @@ const ActivityFeed = ({ logs }: { logs: ActivityLogItem[] }) => (
     </div>
 );
 
+const LeadModal = ({ isOpen, onClose, lead, onSave }: { isOpen: boolean, onClose: () => void, lead: Lead | null, onSave: (lead: Lead) => void }) => {
+  const [formData, setFormData] = useState<Partial<Lead>>({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '' });
+  useEffect(() => { if (lead) setFormData(lead); else setFormData({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '', id: `LEAD-${Date.now()}`, lastContact: new Date().toISOString().split('T')[0] }); }, [lead, isOpen]);
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">{lead ? 'Edit Lead' : 'New Lead'}</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Name</label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" autoFocus /></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Company</label><input type="text" value={formData.company} onChange={(e) => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
+          <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Value ($)</label><input type="number" value={formData.value} onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div></div>
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={() => { onSave(formData as Lead); onClose(); }} disabled={!formData.name} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 transition-all">Save Lead</button></div>
+      </div>
+    </div>
+  );
+};
+
+const LeadCard: React.FC<{ lead: Lead, onClick: () => void }> = ({ lead, onClick }) => (
+    <div onClick={onClick} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col gap-2 relative">
+      <div className="flex justify-between items-start"><h4 className="font-bold text-sm text-slate-800">{lead.name}</h4>{lead.probability > 70 && <span className="bg-orange-100 text-orange-600 p-1 rounded-full"><TrendingUp size={12} /></span>}</div>
+      <p className="text-xs text-slate-500">{lead.company}</p>
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50"><span className="text-xs font-bold text-slate-700">${lead.value.toLocaleString()}</span><span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{lead.source}</span></div>
+      <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mt-1"><div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${lead.probability}%` }} /></div>
+    </div>
+);
+
+const LeadKanbanColumn: React.FC<{ status: string, leads: Lead[], onEdit: (lead: Lead) => void }> = ({ status, leads, onEdit }) => (
+    <div className="flex-shrink-0 w-72 bg-slate-50/50 rounded-2xl border border-slate-100 flex flex-col max-h-full">
+      <div className="p-4 flex items-center justify-between border-b border-slate-100"><div className="flex items-center gap-2"><h4 className="font-bold text-sm text-slate-700">{status}</h4><span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{leads.length}</span></div><span className="text-[10px] text-slate-400 font-medium">${leads.reduce((sum, l) => sum + l.value, 0).toLocaleString()}</span></div>
+      <div className="p-3 space-y-3 overflow-y-auto flex-1 custom-scrollbar">{leads.map(lead => <LeadCard key={lead.id} lead={lead} onClick={() => onEdit(lead)} />)}</div>
+    </div>
+);
+
+const ProjectCard = ({ project, onClick, onClone, onDelete, onUpdate, stats }: any) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  
+  return (
+    <>
+      <div onClick={onClick} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col h-full relative overflow-visible">
+        <div className={`absolute top-0 left-0 w-1 h-full rounded-l-2xl ${project.status === 'Execution' ? 'bg-green-500' : project.status === 'Planning' ? 'bg-blue-500' : project.status === 'High Risk' ? 'bg-red-500' : 'bg-slate-300'}`} />
+        <div className="flex justify-between items-start mb-3 pl-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-slate-800 truncate text-base mb-1">{project.title}</h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wide">{project.category}</span>
+          </div>
+          <div className="relative">
+             <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} className={`p-1.5 rounded-lg transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600 opacity-0 group-hover:opacity-100'}`}><MoreHorizontal size={18} /></button>
+             <ActionMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onShare={() => setIsShareModalOpen(true)} onClone={onClone} onArchive={() => onUpdate({...project, status: 'Archived'})} onDelete={onDelete} />
+          </div>
+        </div>
+        <div className="flex-1 pl-3">
+          <p className="text-xs text-slate-500 line-clamp-2 mb-4 h-10">{project.description || 'No description provided.'}</p>
+          
+          {stats && (
+            <div className="grid grid-cols-3 gap-2 mb-4 border-b border-slate-50 pb-3">
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Tasks</span>
+                    <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
+                        <CheckSquare size={12} className="text-slate-400"/>
+                        {stats.taskCount}
+                    </div>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Budget</span>
+                    <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
+                        <Wallet size={12} className="text-slate-400"/>
+                        ${stats.committed.toLocaleString()}
+                    </div>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Overdue</span>
+                    <div className={`flex items-center gap-1 text-xs font-bold ${stats.overdueCount > 0 ? 'text-red-600' : 'text-slate-700'}`}>
+                        <AlertCircle size={12} className={stats.overdueCount > 0 ? 'text-red-500' : 'text-slate-400'}/>
+                        {stats.overdueCount}
+                    </div>
+                </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-2"><span>Progress</span><span className="font-bold text-slate-700">{project.progress}%</span></div>
+          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4"><div className={`h-full rounded-full transition-all duration-500 ${project.riskLevel === 'High' ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${project.progress}%` }}></div></div>
+          <div className="flex justify-between items-center pt-3 border-t border-slate-50">
+             <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400" /><span className="text-xs font-medium text-slate-600">{formatDateDisplay(project.startDate)}</span></div>
+             {project.riskLevel && <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${project.riskLevel === 'High' ? 'bg-red-50 text-red-600' : project.riskLevel === 'Medium' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{project.riskLevel} Risk</div>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
 const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDeleteProject, onUpdateProject, onCloneProject }: any) => {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   return (
@@ -1614,9 +1385,26 @@ const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDel
         <NewProjectModal isOpen={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} onSubmit={onCreateProject} />
         <SectionHeader title="Projects" subtitle="Manage your ongoing initiatives" action={<button onClick={() => setIsNewModalOpen(true)} className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"><Plus size={18} /><span>New Project</span></button>} />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-4 custom-scrollbar flex-1 min-h-0">
-            {projects.map((project: Project) => (
-                <ProjectCard key={project.id} project={project} onClick={() => onSelectProject(project.id)} onClone={() => onCloneProject(project)} onDelete={() => onDeleteProject(project.id)} onUpdate={(p: Project) => onUpdateProject(p)} />
-            ))}
+            {projects.map((project: Project) => {
+                const projectTasks = tasks.filter((t: Task) => t.projectId === project.id);
+                const taskCount = projectTasks.length;
+                const committed = projectTasks.reduce((sum: number, t: Task) => sum + (t.budget?.agreed || 0), 0);
+                const now = new Date();
+                const today = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                const overdueCount = projectTasks.filter((t: Task) => t.status !== 'Done' && t.status !== 'Archived' && t.dueDate && t.dueDate < today).length;
+
+                return (
+                    <ProjectCard 
+                        key={project.id} 
+                        project={project} 
+                        stats={{ taskCount, committed, overdueCount }}
+                        onClick={() => onSelectProject(project.id)} 
+                        onClone={() => onCloneProject(project)} 
+                        onDelete={() => onDeleteProject(project.id)} 
+                        onUpdate={(p: Project) => onUpdateProject(p)} 
+                    />
+                );
+            })}
             <button onClick={() => setIsNewModalOpen(true)} className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 hover:border-primary hover:text-primary hover:bg-slate-50 transition-all group h-full min-h-[250px]">
                 <div className="w-12 h-12 rounded-full bg-slate-50 group-hover:bg-white border border-slate-200 group-hover:border-primary/30 flex items-center justify-center mb-3 transition-all"><Plus size={24} /></div>
                 <span className="font-bold text-sm">Create New Project</span>
@@ -1625,6 +1413,81 @@ const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDel
     </div>
   );
 };
+
+const LeadsView = () => {
+  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleSaveLead = (lead: Lead) => {
+      if (leads.find(l => l.id === lead.id)) {
+          setLeads(leads.map(l => l.id === lead.id ? lead : l));
+      } else {
+          setLeads([lead, ...leads]);
+      }
+  };
+
+  const statuses = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
+
+  return (
+      <div className="h-full flex flex-col animate-in fade-in duration-500 relative">
+          <LeadModal 
+              isOpen={isModalOpen} 
+              onClose={() => { setIsModalOpen(false); setEditingLead(null); }} 
+              lead={editingLead} 
+              onSave={handleSaveLead} 
+          />
+          <SectionHeader 
+              title="Leads Pipeline" 
+              subtitle="Track and manage potential opportunities" 
+              action={
+                  <button 
+                      onClick={() => { setEditingLead(null); setIsModalOpen(true); }} 
+                      className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"
+                  >
+                      <Plus size={18} /><span>Add Lead</span>
+                  </button>
+              } 
+          />
+          <div className="flex-1 overflow-x-auto min-h-0 pb-4 custom-scrollbar">
+              <div className="flex space-x-4 h-full min-w-max pb-2 px-1">
+                  {statuses.map(status => (
+                      <LeadKanbanColumn 
+                          key={status} 
+                          status={status} 
+                          leads={leads.filter(l => l.status === status)} 
+                          onEdit={(l: Lead) => { setEditingLead(l); setIsModalOpen(true); }}
+                      />
+                  ))}
+              </div>
+          </div>
+      </div>
+  );
+};
+
+const SidebarItem = ({ 
+  icon: Icon, 
+  label, 
+  active, 
+  onClick 
+}: { 
+  icon: any, 
+  label: string, 
+  active: boolean, 
+  onClick: () => void 
+}) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+      active 
+        ? 'bg-primary text-white shadow-lg shadow-primary/30' 
+        : 'text-slate-500 hover:bg-white hover:text-primary'
+    }`}
+  >
+    <Icon size={20} className={active ? 'text-white' : 'text-slate-400 group-hover:text-primary'} />
+    {label && <span className="font-medium text-sm truncate">{label}</span>}
+  </button>
+);
 
 const App = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
@@ -1667,8 +1530,7 @@ const App = () => {
             <SidebarItem icon={LayoutDashboard} label={isSidebarOpen ? "Dashboard" : ""} active={activeView === 'dashboard'} onClick={() => { setActiveView('dashboard'); setSelectedProjectId(null); }} />
             <SidebarItem icon={Briefcase} label={isSidebarOpen ? "Projects" : ""} active={activeView === 'projects'} onClick={() => { setActiveView('projects'); setSelectedProjectId(null); }} />
             <SidebarItem icon={CheckSquare} label={isSidebarOpen ? "My Tasks" : ""} active={activeView === 'tasks'} onClick={() => { setActiveView('tasks'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={Briefcase} label={isSidebarOpen ? "Leads" : ""} active={activeView === 'leads'} onClick={() => { setActiveView('leads'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={Users} label={isSidebarOpen ? "Contacts" : ""} active={activeView === 'contacts'} onClick={() => setActiveView('contacts')} />
+            <SidebarItem icon={Users} label={isSidebarOpen ? "Leads" : ""} active={activeView === 'leads'} onClick={() => { setActiveView('leads'); setSelectedProjectId(null); }} />
             <SidebarItem icon={Bot} label={isSidebarOpen ? "Automation" : ""} active={activeView === 'automation'} onClick={() => setActiveView('automation')} />
         </nav>
         <div className="p-3 border-t border-slate-50 space-y-1"><SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeView === 'settings'} onClick={() => setActiveView('settings')} />{isSidebarOpen && (<div className="mt-4 flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">JD</div><div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-900 truncate">John Doe</div><div className="text-[10px] text-slate-500 truncate">john@example.com</div></div></div>)}</div>
