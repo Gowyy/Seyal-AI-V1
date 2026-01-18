@@ -8,7 +8,7 @@ import {
   LayoutDashboard, CheckSquare, Users, Settings, Zap, Briefcase,
   ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
   Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
-  Save
+  Save, Building2
 } from 'lucide-react';
 
 // --- Types ---
@@ -16,6 +16,8 @@ import {
 type ViewState = 'dashboard' | 'projects' | 'leads' | 'contacts' | 'automation' | 'settings' | 'tasks';
 
 type ProjectStatus = 'Draft' | 'Planning' | 'Ready' | 'Execution' | 'On Hold' | 'Completed' | 'Cancelled' | 'Archived';
+
+type ClientType = 'Individual' | 'Company';
 
 interface Subtask {
   id: string;
@@ -94,8 +96,11 @@ interface Project {
   riskLevel: 'Low' | 'Medium' | 'High';
   description?: string;
   progress: number;
+  clientType?: ClientType;
+  companyName?: string;
   clientName?: string;
   clientEmail?: string;
+  clientStdCode?: string;
   clientPhone?: string;
 }
 
@@ -132,8 +137,11 @@ interface NewProjectPayload {
   endDate: string;
   budget: number;
   description: string;
+  clientType?: ClientType;
+  companyName?: string;
   clientName?: string;
   clientEmail?: string;
+  clientStdCode?: string;
   clientPhone?: string;
 }
 
@@ -182,9 +190,12 @@ const MOCK_PROJECTS: Project[] = [
     riskLevel: 'Low',
     description: 'End of year marketing campaign across all channels.',
     progress: 45,
-    clientName: 'TechFlow Inc.',
+    clientType: 'Company',
+    companyName: 'TechFlow Inc.',
+    clientName: 'Alice Johnson',
     clientEmail: 'contact@techflow.com',
-    clientPhone: '+1 (555) 123-4567'
+    clientStdCode: '+1',
+    clientPhone: '(555) 123-4567'
   },
   {
     id: 'PROJ-002',
@@ -197,8 +208,11 @@ const MOCK_PROJECTS: Project[] = [
     riskLevel: 'Medium',
     description: 'Renovating the new downtown office space.',
     progress: 15,
-    clientName: 'Internal',
-    clientEmail: 'ops@ourcompany.com'
+    clientType: 'Individual',
+    clientName: 'Internal Ops',
+    clientEmail: 'ops@ourcompany.com',
+    clientStdCode: '+1',
+    clientPhone: '555-000-0000'
   }
 ];
 
@@ -1206,14 +1220,20 @@ const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, 
             <EditProjectModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} project={project} onSave={onUpdateProject} />
             <div className="flex items-start justify-between mb-6 pb-4 border-b border-slate-100">
                 <div className="flex items-start gap-4"><button onClick={onBack} className="mt-1 p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"><ChevronLeft size={20} /></button><div><div className="flex items-center gap-3 mb-1"><h2 className="text-2xl font-bold text-slate-900">{project.title}</h2><span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 uppercase tracking-wide">{project.status}</span></div>
-                    {(project.clientName || project.startDate) && (
+                    {(project.clientName || project.startDate || project.companyName) && (
                         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
+                            {project.clientType === 'Company' && project.companyName && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
+                                    <Building2 size={12} className="text-slate-400" />
+                                    <span className="font-bold text-slate-700">{project.companyName}</span>
+                                </div>
+                            )}
                             {project.clientName && (
                                 <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
                                     <User size={12} className="text-slate-400" />
                                     <span className="font-bold text-slate-700">{project.clientName}</span>
                                     {project.clientEmail && <span className="text-slate-400 border-l border-slate-200 pl-1.5 ml-0.5">{project.clientEmail}</span>}
-                                    {project.clientPhone && <span className="text-slate-400 border-l border-slate-200 pl-1.5 ml-0.5">{project.clientPhone}</span>}
+                                    {(project.clientPhone || project.clientStdCode) && <span className="text-slate-400 border-l border-slate-200 pl-1.5 ml-0.5">{project.clientStdCode} {project.clientPhone}</span>}
                                 </div>
                             )}
                             {(project.startDate || project.endDate) && (
@@ -1239,7 +1259,7 @@ const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, 
 };
 
 const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
-  const [formData, setFormData] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' });
+  const [formData, setFormData] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientType: 'Individual', companyName: '', clientName: '', clientEmail: '', clientStdCode: '+1', clientPhone: '' });
   const [isAiLoading, setIsAiLoading] = useState(false);
   if (!isOpen) return null;
   const handleSubmit = () => {
@@ -1248,7 +1268,7 @@ const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
         return;
     }
     setIsAiLoading(true);
-    setTimeout(() => { onSubmit(formData); setIsAiLoading(false); onClose(); setFormData({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientName: '', clientEmail: '', clientPhone: '' }); }, 1500);
+    setTimeout(() => { onSubmit(formData); setIsAiLoading(false); onClose(); setFormData({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientType: 'Individual', companyName: '', clientName: '', clientEmail: '', clientStdCode: '+1', clientPhone: '' }); }, 1500);
   };
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
@@ -1263,12 +1283,24 @@ const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
                         <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><div className="relative"><span className="absolute left-3 top-2 text-slate-400 text-sm">$</span><input type="number" value={formData.budget || ''} onChange={e => setFormData({...formData, budget: parseFloat(e.target.value) || 0})} className="w-full pl-6 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0.00" /></div></div></div>
                         <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
                         <div className="pt-2 border-t border-slate-100 mt-2">
-                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Client Details (Optional)</div>
+                             <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-slate-500 uppercase">Client Details</div>
+                                <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                                    <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
+                                    <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
+                                </div>
+                             </div>
                              <div className="grid grid-cols-1 gap-3">
-                                 <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Client Name" /></div>
+                                 {formData.clientType === 'Company' && (
+                                     <div><input type="text" value={formData.companyName || ''} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Company Name" /></div>
+                                 )}
+                                 <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder={formData.clientType === 'Company' ? "Contact Person Name" : "Client Name"} /></div>
                                  <div className="grid grid-cols-2 gap-3">
                                      <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
-                                     <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Phone Number" />
+                                     <div className="flex gap-2">
+                                        <input type="text" value={formData.clientStdCode || '+1'} onChange={e => setFormData({...formData, clientStdCode: e.target.value})} className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" placeholder="+1" />
+                                        <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Mobile Number" />
+                                     </div>
                                  </div>
                              </div>
                         </div>
@@ -1306,12 +1338,24 @@ const EditProjectModal = ({ isOpen, onClose, project, onSave }: any) => {
                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as ProjectStatus})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Draft', 'Planning', 'Ready', 'Execution', 'On Hold', 'Completed', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Risk Level</label><select value={formData.riskLevel} onChange={e => setFormData({...formData, riskLevel: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Low', 'Medium', 'High'].map(r => <option key={r} value={r}>{r}</option>)}</select></div></div>
                 <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
                 <div className="pt-2 border-t border-slate-100 mt-2">
-                     <div className="text-xs font-bold text-slate-500 uppercase mb-2">Client Details (Optional)</div>
+                     <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-bold text-slate-500 uppercase">Client Details</div>
+                        <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                            <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' || !formData.clientType ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
+                            <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
+                        </div>
+                     </div>
                      <div className="grid grid-cols-1 gap-3">
-                         <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Client Name" /></div>
+                         {formData.clientType === 'Company' && (
+                             <div><input type="text" value={formData.companyName || ''} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Company Name" /></div>
+                         )}
+                         <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder={formData.clientType === 'Company' ? "Contact Person Name" : "Client Name"} /></div>
                          <div className="grid grid-cols-2 gap-3">
                              <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
-                             <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Phone Number" />
+                             <div className="flex gap-2">
+                                <input type="text" value={formData.clientStdCode || '+1'} onChange={e => setFormData({...formData, clientStdCode: e.target.value})} className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" placeholder="+1" />
+                                <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Mobile Number" />
+                             </div>
                          </div>
                      </div>
                 </div>
@@ -1525,187 +1569,190 @@ const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDel
 
 const LeadsView = () => {
   const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const handleSaveLead = (lead: Lead) => {
-      if (leads.find(l => l.id === lead.id)) {
-          setLeads(leads.map(l => l.id === lead.id ? lead : l));
-      } else {
-          setLeads([lead, ...leads]);
-      }
+    if (leads.some(l => l.id === lead.id)) {
+      setLeads(leads.map(l => l.id === lead.id ? lead : l));
+    } else {
+      setLeads([...leads, lead]);
+    }
+    setIsModalOpen(false);
+    setEditingLead(null);
   };
 
-  const statuses = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
-
   return (
-      <div className="h-full flex flex-col animate-in fade-in duration-500 relative">
-          <LeadModal 
-              isOpen={isModalOpen} 
-              onClose={() => { setIsModalOpen(false); setEditingLead(null); }} 
-              lead={editingLead} 
-              onSave={handleSaveLead} 
-          />
-          <SectionHeader 
-              title="Leads Pipeline" 
-              subtitle="Track and manage potential opportunities" 
-              action={
-                  <button 
-                      onClick={() => { setEditingLead(null); setIsModalOpen(true); }} 
-                      className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"
-                  >
-                      <Plus size={18} /><span>Add Lead</span>
-                  </button>
-              } 
-          />
-          <div className="flex-1 overflow-x-auto min-h-0 pb-4 custom-scrollbar">
-              <div className="flex space-x-4 h-full min-w-max pb-2 px-1">
-                  {statuses.map(status => (
-                      <LeadKanbanColumn 
-                          key={status} 
-                          status={status} 
-                          leads={leads.filter(l => l.status === status)} 
-                          onEdit={(l: Lead) => { setEditingLead(l); setIsModalOpen(true); }}
-                      />
-                  ))}
-              </div>
-          </div>
-      </div>
+    <div className="h-full flex flex-col animate-in fade-in duration-500">
+        <LeadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} lead={editingLead} onSave={handleSaveLead} />
+        <SectionHeader 
+            title="Leads Pipeline" 
+            subtitle="Manage and track your opportunities" 
+            action={
+                <button 
+                    onClick={() => { setEditingLead(null); setIsModalOpen(true); }} 
+                    className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"
+                >
+                    <Plus size={18} /><span>Add Lead</span>
+                </button>
+            } 
+        />
+        <div className="flex-1 overflow-x-auto min-h-0 pb-4">
+            <div className="flex space-x-6 h-full min-w-max pb-2 px-1">
+                {['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'].map(status => (
+                    <LeadKanbanColumn 
+                        key={status} 
+                        status={status} 
+                        leads={leads.filter(l => l.status === status)} 
+                        onEdit={(l: Lead) => { setEditingLead(l); setIsModalOpen(true); }} 
+                    />
+                ))}
+            </div>
+        </div>
+    </div>
   );
 };
 
-const SidebarItem = ({ 
-  icon: Icon, 
-  label, 
-  active, 
-  onClick 
-}: { 
-  icon: any, 
-  label: string, 
-  active: boolean, 
-  onClick: () => void 
-}) => (
-  <button 
-    onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-      active 
-        ? 'bg-primary text-white shadow-lg shadow-primary/30' 
-        : 'text-slate-500 hover:bg-white hover:text-primary'
-    }`}
-  >
-    <Icon size={20} className={active ? 'text-white' : 'text-slate-400 group-hover:text-primary'} />
-    {label && <span className="font-medium text-sm truncate">{label}</span>}
-  </button>
-);
-
 const App = () => {
-  const [activeView, setActiveView] = useState<ViewState>('dashboard');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+  const [view, setView] = useState<ViewState>('dashboard');
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
-  const [notification, setNotification] = useState<{message: string, onUndo: () => void, id: number} | null>(null);
+  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showNotification, setShowNotification] = useState<string | null>(null);
+  const [lastDeletedTask, setLastDeletedTask] = useState<Task | null>(null);
 
-  const projectsWithRisk = useMemo(() => {
-    return projects.map(p => {
-        const metrics = calculateRiskMetrics(p, tasks);
-        return { ...p, riskLevel: metrics.level };
-    });
-  }, [projects, tasks]);
-
-  const handleUpdateTask = (updatedTask: Task) => setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-  const handleAddTask = (newTask: Task) => setTasks(prev => [newTask, ...prev]);
-  
-  const handleDeleteTask = (taskId: string) => {
-    if (!taskId) return;
-
-    // 1. Capture the task for potential undo
-    const taskToDelete = tasks.find(t => t.id === taskId);
-    
-    // 2. Ask for confirmation
-    const confirmMessage = taskToDelete 
-        ? `Are you sure you want to delete "${taskToDelete.title}"?`
-        : "Are you sure you want to delete this task?";
-
-    if (window.confirm(confirmMessage)) {
-        // 3. Perform Deletion
-        setTasks(prev => prev.filter(t => t.id !== taskId));
-
-        // 4. Show Notification with Undo
-        if (taskToDelete) {
-            setNotification({
-                message: "Task deleted",
-                onUndo: () => {
-                    setTasks(prev => [...prev, taskToDelete]);
-                    setNotification(null);
-                },
-                id: Date.now()
-            });
-        }
-    }
+  const handleCreateProject = (payload: NewProjectPayload) => {
+      const newProject: Project = {
+          id: `PROJ-${Date.now()}`,
+          ...payload,
+          status: 'Planning',
+          budget: { total: payload.budget, committed: 0, spent: 0 },
+          riskLevel: 'Low',
+          progress: 0
+      };
+      setProjects([...projects, newProject]);
+      setView('projects');
   };
 
-  const handleUpdateProject = (updatedProject: Project) => setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-  
-  const handleDeleteProject = (projectId: string) => { 
-      if (window.confirm('Are you sure you want to delete this project?')) {
-          const projectToDelete = projects.find(p => p.id === projectId);
-          if (projectToDelete) {
-              setProjects(prev => prev.filter(p => p.id !== projectId));
-              setNotification({
-                message: 'Project deleted',
-                onUndo: () => {
-                    setProjects(prev => {
-                         if (prev.find(p => p.id === projectId)) return prev;
-                         return [...prev, projectToDelete];
-                    });
-                    setNotification(null);
-                },
-                id: Date.now()
-            });
-          }
+  const handleUpdateProject = (updated: Project) => {
+      setProjects(projects.map(p => p.id === updated.id ? updated : p));
+  };
+
+  const handleDeleteProject = (id: string) => {
+      if(confirm('Are you sure you want to delete this project?')) {
+          setProjects(projects.filter(p => p.id !== id));
+          setTasks(tasks.filter(t => t.projectId !== id));
       }
   };
 
-  const handleCloneProject = (project: Project) => { const newId = `PROJ-${Date.now()}`; setProjects(prev => [...prev, { ...project, id: newId, title: `${project.title} (Copy)`, status: 'Draft', progress: 0 }]); };
-  const handleCreateProject = (data: NewProjectPayload) => {
+  const handleCloneProject = (project: Project) => {
       const newId = `PROJ-${Date.now()}`;
-      setProjects(prev => [...prev, { id: newId, title: data.title, category: data.category, status: 'Planning', startDate: data.startDate, endDate: data.endDate, budget: { total: data.budget, committed: 0, spent: 0 }, riskLevel: 'Low', description: data.description, progress: 0, clientName: data.clientName, clientEmail: data.clientEmail, clientPhone: data.clientPhone }]);
-      setSelectedProjectId(newId);
-      setActiveView('projects');
+      const newProject = { ...project, id: newId, title: `${project.title} (Copy)`, status: 'Draft' as ProjectStatus };
+      setProjects([...projects, newProject]);
+      const projectTasks = tasks.filter(t => t.projectId === project.id);
+      const newTasks = projectTasks.map(t => ({...t, id: `TASK-${Date.now()}-${Math.random()}`, projectId: newId}));
+      setTasks([...tasks, ...newTasks]);
   };
 
-  const navigateToProject = (id: string) => {
-    setSelectedProjectId(id);
-    setActiveView('projects');
+  const handleUpdateTask = (updated: Task) => {
+      setTasks(tasks.map(t => t.id === updated.id ? updated : t));
   };
+
+  const handleAddTask = (task: Task) => {
+      setTasks([...tasks, task]);
+  };
+
+  const handleDeleteTask = (id: string) => {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        setLastDeletedTask(task);
+        setTasks(tasks.filter(t => t.id !== id));
+        setShowNotification('Task deleted');
+      }
+  };
+
+  const undoDeleteTask = () => {
+      if (lastDeletedTask) {
+          setTasks([...tasks, lastDeletedTask]);
+          setLastDeletedTask(null);
+          setShowNotification(null);
+      }
+  };
+
+  const renderContent = () => {
+      if (selectedProjectId) {
+          return <ProjectDetailView projectId={selectedProjectId} onBack={() => setSelectedProjectId(null)} tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projects} onUpdateProject={handleUpdateProject} />;
+      }
+
+      switch (view) {
+          case 'projects': return <ProjectsView projects={projects} tasks={tasks} onSelectProject={setSelectedProjectId} onCreateProject={handleCreateProject} onDeleteProject={handleDeleteProject} onUpdateProject={handleUpdateProject} onCloneProject={handleCloneProject} />;
+          case 'tasks': return <div className="h-full flex flex-col"><SectionHeader title="All Tasks" subtitle="Global task list" /><TasksView tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projects} /></div>;
+          case 'leads': return <LeadsView />;
+          case 'dashboard': return (
+              <div className="p-8 flex flex-col items-center justify-center h-full text-slate-400">
+                  <LayoutDashboard size={48} className="mb-4 opacity-50"/>
+                  <h2 className="text-xl font-bold mb-2">Dashboard Coming Soon</h2>
+                  <p>Overview of all projects and AI insights.</p>
+                  <button onClick={() => setView('projects')} className="mt-6 text-primary font-bold hover:underline">Go to Projects</button>
+              </div>
+          );
+          default: return <div className="p-10 text-center text-slate-500">Module under construction</div>;
+      }
+  };
+
+  const NavItem = ({ id, icon: Icon, label }: any) => (
+      <button 
+          onClick={() => { setView(id); setSelectedProjectId(null); }}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === id && !selectedProjectId ? 'bg-primary text-white shadow-lg shadow-primary/30 font-bold' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 font-medium'}`}
+      >
+          <Icon size={20} />
+          <span>{label}</span>
+      </button>
+  );
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 flex flex-col transition-all duration-300 z-50`}>
-        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-50"><div className={`flex items-center gap-2 ${!isSidebarOpen && 'justify-center w-full'}`}><div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0"><Zap size={18} fill="currentColor" /></div>{isSidebarOpen && <span className="font-bold text-lg tracking-tight">Seyal AI</span>}</div>{isSidebarOpen && (<button onClick={() => setIsSidebarOpen(false)} className="p-1.5 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><ChevronLeft size={18} /></button>)}</div>
-        {!isSidebarOpen && (<button onClick={() => setIsSidebarOpen(true)} className="mx-auto mt-4 p-1.5 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><ChevronRight size={18} /></button>)}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
-            <SidebarItem icon={LayoutDashboard} label={isSidebarOpen ? "Dashboard" : ""} active={activeView === 'dashboard'} onClick={() => { setActiveView('dashboard'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={Briefcase} label={isSidebarOpen ? "Projects" : ""} active={activeView === 'projects'} onClick={() => { setActiveView('projects'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={CheckSquare} label={isSidebarOpen ? "My Tasks" : ""} active={activeView === 'tasks'} onClick={() => { setActiveView('tasks'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={Users} label={isSidebarOpen ? "Leads" : ""} active={activeView === 'leads'} onClick={() => { setActiveView('leads'); setSelectedProjectId(null); }} />
-            <SidebarItem icon={Bot} label={isSidebarOpen ? "Automation" : ""} active={activeView === 'automation'} onClick={() => setActiveView('automation')} />
-        </nav>
-        <div className="p-3 border-t border-slate-50 space-y-1"><SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeView === 'settings'} onClick={() => setActiveView('settings')} />{isSidebarOpen && (<div className="mt-4 flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">JD</div><div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-900 truncate">John Doe</div><div className="text-[10px] text-slate-500 truncate">john@example.com</div></div></div>)}</div>
-      </aside>
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-slate-50/50 p-6 relative">
-        {activeView === 'dashboard' && <div className="flex-1 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl m-4 animate-in fade-in zoom-in-95 duration-500"><LayoutDashboard size={48} className="mb-4 text-slate-200" /><h2 className="text-xl font-bold text-slate-600">Dashboard</h2><p className="text-sm">Widgets coming soon.</p></div>}
-        {activeView === 'projects' && (selectedProjectId ? <ProjectDetailView projectId={selectedProjectId} onBack={() => setSelectedProjectId(null)} tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projectsWithRisk} onUpdateProject={handleUpdateProject} /> : <ProjectsView projects={projectsWithRisk} tasks={tasks} onSelectProject={navigateToProject} onCreateProject={handleCreateProject} onDeleteProject={handleDeleteProject} onUpdateProject={handleUpdateProject} onCloneProject={handleCloneProject} />)}
-        {activeView === 'tasks' && <TasksView tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projectsWithRisk} />}
-        {activeView === 'leads' && <LeadsView />}
-        {(activeView === 'contacts' || activeView === 'automation' || activeView === 'settings') && <div className="flex-1 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl m-4 animate-in fade-in zoom-in-95 duration-500"><Bot size={48} className="mb-4 text-slate-200" /><h2 className="text-xl font-bold text-slate-600">Coming Soon</h2><p className="text-sm">The {activeView} module is under construction.</p></div>}
-        
-        {notification && <NotificationToast message={notification.message} onUndo={notification.onUndo} onClose={() => setNotification(null)} key={notification.id} />}
-      </main>
+    <div className="flex h-screen bg-white font-sans text-slate-900">
+        <aside className="w-64 border-r border-slate-100 flex flex-col bg-slate-50/30">
+            <div className="p-6 flex items-center gap-2">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white"><Sparkles size={18} fill="currentColor" /></div>
+                <h1 className="text-xl font-black tracking-tight text-slate-900">Seyal<span className="text-primary">AI</span></h1>
+            </div>
+            <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+                <div className="text-[10px] font-bold text-slate-400 uppercase px-4 mb-2 mt-4">Main</div>
+                <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
+                <NavItem id="projects" icon={Briefcase} label="Projects" />
+                <NavItem id="tasks" icon={CheckSquare} label="My Tasks" />
+                
+                <div className="text-[10px] font-bold text-slate-400 uppercase px-4 mb-2 mt-6">Growth</div>
+                <NavItem id="leads" icon={Users} label="Leads & CRM" />
+                <NavItem id="automation" icon={Zap} label="Automations" />
+                
+                <div className="text-[10px] font-bold text-slate-400 uppercase px-4 mb-2 mt-6">Workspace</div>
+                <NavItem id="contacts" icon={User} label="Contacts" />
+                <NavItem id="settings" icon={Settings} label="Settings" />
+            </nav>
+            <div className="p-4 border-t border-slate-200/60">
+                <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">JD</div>
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-slate-900 truncate">John Doe</div>
+                        <div className="text-[10px] text-slate-500 truncate">Pro Workspace</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        <main className="flex-1 min-w-0 h-full overflow-hidden bg-white relative">
+            <div className="h-full p-6 overflow-hidden">
+                {renderContent()}
+            </div>
+            {showNotification && <NotificationToast message={showNotification} onUndo={undoDeleteTask} onClose={() => setShowNotification(null)} />}
+        </main>
     </div>
   );
 };
 
 const container = document.getElementById('root');
-if (container) { const root = createRoot(container); root.render(<App />); }
+if (container) {
+  const root = createRoot(container);
+  root.render(<App />);
+}
