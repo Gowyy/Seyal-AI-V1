@@ -8,7 +8,7 @@ import {
   LayoutDashboard, CheckSquare, Users, Settings, Zap, Briefcase,
   ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
   Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
-  Save, Building2
+  Save, Building2, MapPin
 } from 'lucide-react';
 
 // --- Types ---
@@ -104,18 +104,26 @@ interface Project {
   clientPhone?: string;
 }
 
+type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Demo Scheduled' | 'Proposal Made' | 'Negotiation Started' | 'Won' | 'Lost';
+
 interface Lead {
   id: string;
   name: string;
-  company: string;
+  clientType: ClientType;
+  company?: string; // Business/Organization Name
   email: string;
   phone: string;
-  status: 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Won' | 'Lost';
-  source: 'LinkedIn' | 'Website' | 'Referral' | 'Cold Call' | 'Event';
-  value: number;
-  lastContact: string;
-  probability: number;
-  notes: string;
+  stdCode?: string;
+  location?: string;
+  country?: string;
+  source?: string;
+  serviceType?: string;
+  status: LeadStatus;
+  budgetRange?: string;
+  requirement?: string;
+  value: number; // Keep for backward compatibility or calculations
+  lastContact?: string;
+  probability?: number;
 }
 
 interface ActivityLogItem {
@@ -148,33 +156,46 @@ interface NewProjectPayload {
 // --- Mock Data ---
 
 const AVAILABLE_LISTS = ['General', 'Marketing', 'Sales', 'Engineering', 'Design', 'HR', 'Finance'];
+let AVAILABLE_SERVICES = ['Web designing', 'AI Automation', 'App development'];
 
 const MOCK_LEADS: Lead[] = [
   {
     id: 'LEAD-001',
     name: 'Alice Johnson',
+    clientType: 'Company',
     company: 'TechFlow Inc.',
     email: 'alice@techflow.com',
-    phone: '+1 (555) 123-4567',
-    status: 'Proposal',
+    phone: '(555) 123-4567',
+    stdCode: '+1',
+    location: 'New York',
+    country: 'USA',
+    status: 'Proposal Made',
     source: 'Website',
+    serviceType: 'Web designing',
+    budgetRange: '₹5–10L',
+    requirement: 'Need a complete overhaul of the corporate website with AI chatbot integration.',
     value: 15000,
     lastContact: '2023-11-10',
-    probability: 75,
-    notes: 'Interested in full-stack modernization.'
+    probability: 75
   },
   {
     id: 'LEAD-002',
     name: 'Bob Smith',
-    company: 'Global Logistics',
-    email: 'bsmith@glogistics.net',
-    phone: '+1 (555) 987-6543',
+    clientType: 'Individual',
+    company: '',
+    email: 'bsmith@gmail.com',
+    phone: '9876543210',
+    stdCode: '+91',
+    location: 'Bangalore',
+    country: 'India',
     status: 'New',
     source: 'LinkedIn',
+    serviceType: 'AI Automation',
+    budgetRange: '₹1–5L',
+    requirement: 'Looking for personal productivity automation tools.',
     value: 5000,
     lastContact: '2023-11-12',
-    probability: 20,
-    notes: 'Connected via LinkedIn, sent intro deck.'
+    probability: 20
   }
 ];
 
@@ -302,35 +323,6 @@ const formatDateDisplay = (dateStr: string) => {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-const calculateRiskMetrics = (project: Project, tasks: Task[]) => {
-  const projectTasks = tasks.filter(t => t.projectId === project.id);
-  const now = new Date();
-  const today = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-  
-  const overdueTasks = projectTasks.filter(t => t.status !== 'Done' && t.status !== 'Archived' && t.dueDate && t.dueDate < today);
-  const committed = projectTasks.reduce((sum, t) => sum + (t.budget?.agreed || 0), 0);
-  const totalBudget = project.budget.total;
-  const budgetUsage = totalBudget > 0 ? committed / totalBudget : 0;
-
-  const threeDaysFromNow = new Date();
-  threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-  const threeDaysStr = threeDaysFromNow.toISOString().split('T')[0];
-  const atRiskTasks = projectTasks.filter(t => t.status !== 'Done' && t.status !== 'Archived' && t.dueDate && t.dueDate >= today && t.dueDate <= threeDaysStr);
-
-  let score = 0;
-  if (budgetUsage > 1.0) score += 10;
-  else if (budgetUsage > 0.85) score += 3;
-
-  score += overdueTasks.length * 3;
-  score += atRiskTasks.length * 1;
-
-  let level: 'Low' | 'Medium' | 'High' = 'Low';
-  if (score >= 10) level = 'High';
-  else if (score >= 5) level = 'Medium';
-
-  return { level, overdueCount: overdueTasks.length, atRiskCount: atRiskTasks.length, budgetUsage };
 };
 
 // Components
@@ -1108,7 +1100,6 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
                 setIsModalOpen(false);
                 break;
             case 'delete':
-                // Confirmation is now handled in App.tsx to ensure logic consistency
                 onDeleteTask(task.id);
                 setIsModalOpen(false);
                 break;
@@ -1426,19 +1417,150 @@ const ActivityFeed = ({ logs }: { logs: ActivityLogItem[] }) => (
 );
 
 const LeadModal = ({ isOpen, onClose, lead, onSave }: { isOpen: boolean, onClose: () => void, lead: Lead | null, onSave: (lead: Lead) => void }) => {
-  const [formData, setFormData] = useState<Partial<Lead>>({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '' });
-  useEffect(() => { if (lead) setFormData(lead); else setFormData({ name: '', company: '', email: '', phone: '', status: 'New', source: 'Website', value: 0, probability: 0, notes: '', id: `LEAD-${Date.now()}`, lastContact: new Date().toISOString().split('T')[0] }); }, [lead, isOpen]);
+  const [formData, setFormData] = useState<Partial<Lead>>({ name: '', clientType: 'Company', company: '', email: '', phone: '', stdCode: '+91', country: '', status: 'New', source: 'Website', value: 0, probability: 0, location: '', serviceType: '', budgetRange: '', requirement: '' });
+  const [customService, setCustomService] = useState('');
+  
+  useEffect(() => { 
+      if (lead) {
+          setFormData(lead); 
+      } else {
+          // Default STD code logic based on simplistic locale check
+          const userLocale = navigator.language || 'en-US';
+          let defaultStd = '+1';
+          if (userLocale.includes('IN')) defaultStd = '+91';
+          else if (userLocale.includes('GB')) defaultStd = '+44';
+          else if (userLocale.includes('AU')) defaultStd = '+61';
+          
+          setFormData({ 
+              name: '', 
+              clientType: 'Company', 
+              company: '', 
+              email: '', 
+              phone: '', 
+              stdCode: defaultStd,
+              country: '',
+              status: 'New', 
+              source: 'Website', 
+              value: 0, 
+              probability: 0, 
+              location: '', 
+              serviceType: '', 
+              budgetRange: '', 
+              requirement: '', 
+              id: `LEAD-${Date.now()}` 
+          }); 
+      }
+  }, [lead, isOpen]);
+
+  const handleSave = () => {
+      let finalServiceType = formData.serviceType;
+      if (formData.serviceType === 'Not in list') {
+          finalServiceType = customService.trim();
+          if (finalServiceType && !AVAILABLE_SERVICES.includes(finalServiceType)) {
+              AVAILABLE_SERVICES.push(finalServiceType);
+          }
+      }
+
+      let finalClientType = formData.clientType;
+      // "If company name is not provided then its auto selected to individual"
+      if (formData.clientType === 'Company' && !formData.company?.trim()) {
+          finalClientType = 'Individual';
+      }
+
+      onSave({ ...formData, serviceType: finalServiceType, clientType: finalClientType } as Lead);
+      onClose();
+  };
+
   if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">{lead ? 'Edit Lead' : 'New Lead'}</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">{lead ? 'Edit Lead' : 'Lead Capture'}</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+          
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Name</label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" autoFocus /></div>
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Company</label><input type="text" value={formData.company} onChange={(e) => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
-          <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Value ($)</label><input type="number" value={formData.value} onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div></div>
+          
+          <div className="flex items-center justify-between mb-1 mt-3">
+                <label className="block text-xs font-bold text-slate-500 uppercase">Client Type</label>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                    <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
+                    <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
+                </div>
+          </div>
+          
+          {formData.clientType === 'Company' && (
+              <div className="animate-in fade-in slide-in-from-top-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Business / Organization Name</label><input type="text" value={formData.company || ''} onChange={(e) => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
+              <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Mobile Number</label>
+                  <div className="flex gap-2">
+                      <input 
+                          type="text" 
+                          value={formData.stdCode || '+91'} 
+                          onChange={(e) => setFormData({...formData, stdCode: e.target.value})} 
+                          className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" 
+                          placeholder="+91"
+                      />
+                      <input 
+                          type="tel" 
+                          value={formData.phone} 
+                          onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" 
+                          placeholder="9876543210"
+                      />
+                  </div>
+              </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Location / City</label><input type="text" value={formData.location || ''} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
+              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Country</label><input type="text" value={formData.country || ''} onChange={(e) => setFormData({...formData, country: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
+          </div>
+
+          <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Source</label>
+              <select value={formData.source} onChange={(e) => setFormData({...formData, source: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white mb-2"><option value="">Select...</option>{['LinkedIn', 'Website', 'Referral', 'Cold Call', 'Event'].map(s => <option key={s} value={s}>{s}</option>)}</select>
+          </div>
+
+          <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Service Type</label>
+              <select value={formData.serviceType} onChange={(e) => setFormData({...formData, serviceType: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white mb-2">
+                  <option value="">Select Service...</option>
+                  {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                  <option value="Not in list">Not in list</option>
+              </select>
+              {formData.serviceType === 'Not in list' && (
+                  <input type="text" value={customService} onChange={(e) => setCustomService(e.target.value)} placeholder="Enter Service Type" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary animate-in fade-in" />
+              )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label>
+                <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                    {['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Budget Range</label>
+                <select value={formData.budgetRange} onChange={(e) => setFormData({...formData, budgetRange: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                    <option value="">Select...</option>
+                    <option value="<₹1L">{'<₹1L'}</option>
+                    <option value="₹1–5L">₹1–5L</option>
+                    <option value="₹5–10L">₹5–10L</option>
+                    <option value=">₹10L">{'>₹10L'}</option>
+                </select>
+             </div>
+          </div>
+
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Requirement</label><textarea value={formData.requirement || ''} onChange={(e) => setFormData({...formData, requirement: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Tell us about your requirement..." /></div>
+
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={() => { onSave(formData as Lead); onClose(); }} disabled={!formData.name} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 transition-all">Save Lead</button></div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleSave} disabled={!formData.name} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 transition-all">Save Lead</button></div>
       </div>
     </div>
   );
@@ -1446,10 +1568,13 @@ const LeadModal = ({ isOpen, onClose, lead, onSave }: { isOpen: boolean, onClose
 
 const LeadCard: React.FC<{ lead: Lead, onClick: () => void }> = ({ lead, onClick }) => (
     <div onClick={onClick} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col gap-2 relative">
-      <div className="flex justify-between items-start"><h4 className="font-bold text-sm text-slate-800">{lead.name}</h4>{lead.probability > 70 && <span className="bg-orange-100 text-orange-600 p-1 rounded-full"><TrendingUp size={12} /></span>}</div>
-      <p className="text-xs text-slate-500">{lead.company}</p>
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50"><span className="text-xs font-bold text-slate-700">${lead.value.toLocaleString()}</span><span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{lead.source}</span></div>
-      <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mt-1"><div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${lead.probability}%` }} /></div>
+      <div className="flex justify-between items-start"><h4 className="font-bold text-sm text-slate-800">{lead.name}</h4>{lead.probability && lead.probability > 70 && <span className="bg-orange-100 text-orange-600 p-1 rounded-full"><TrendingUp size={12} /></span>}</div>
+      {lead.company && <div className="flex items-center gap-1 text-xs text-slate-500"><Building2 size={10}/><span className="truncate">{lead.company}</span></div>}
+      {lead.location && <div className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={10}/><span>{lead.location}</span>{lead.country && <span>, {lead.country}</span>}</div>}
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+          <span className="text-xs font-bold text-slate-700">{lead.budgetRange || '$' + lead.value.toLocaleString()}</span>
+          {lead.serviceType && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-medium truncate max-w-[100px]">{lead.serviceType}</span>}
+      </div>
     </div>
 );
 
@@ -1582,6 +1707,8 @@ const LeadsView = () => {
     setEditingLead(null);
   };
 
+  const statuses = ['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'];
+
   return (
     <div className="h-full flex flex-col animate-in fade-in duration-500">
         <LeadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} lead={editingLead} onSave={handleSaveLead} />
@@ -1599,7 +1726,7 @@ const LeadsView = () => {
         />
         <div className="flex-1 overflow-x-auto min-h-0 pb-4">
             <div className="flex space-x-6 h-full min-w-max pb-2 px-1">
-                {['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'].map(status => (
+                {statuses.map(status => (
                     <LeadKanbanColumn 
                         key={status} 
                         status={status} 
