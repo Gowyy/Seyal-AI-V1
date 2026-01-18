@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
+import { GoogleGenAI } from "@google/genai";
 import { 
   X, Share2, MoreHorizontal, List as ListIcon, ChevronDown, Check, Plus, 
   Bot, MessageCircle, Phone, Repeat, History as HistoryIcon, 
   Kanban as KanbanIcon, Table as TableIcon, Calendar, Filter,
   LayoutDashboard, CheckSquare, Users, Settings, Zap, Briefcase,
   ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
-  Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet
+  Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
+  Save
 } from 'lucide-react';
 
 // --- Types ---
@@ -534,6 +536,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   const [isTagInputVisible, setIsTagInputVisible] = useState(false);
   const [tagInputValue, setTagInputValue] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAiSuggesting, setIsAiSuggesting] = useState(false);
   const listDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => { if (task) setFormData(task); else setFormData({ id: Date.now().toString(), projectId: projectId, title: '', status: 'Todo', priority: 'Medium', assignee: 'Me', assignmentType: 'Self', dueDate: initialDate || new Date().toISOString().split('T')[0], dueTime: '', description: '', tags: [], subtasks: [], dependencies: [], recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }, aiCoordination: false, aiChannels: { whatsapp: true, email: false, voice: false }, aiHistory: [], budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, list: 'General' }); }, [task, isOpen, initialDate, projectId]);
@@ -551,6 +554,32 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
 
   const updateField = (field: keyof Task, value: any) => setFormData(prev => ({ ...prev, [field]: value }));
   
+  const handleAiSuggestPriority = async () => {
+    if (!formData.title) return;
+    setIsAiSuggesting(true);
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Analyze this task and suggest a single priority level from these options: Low, Medium, High, Urgent.
+            Context:
+            Title: ${formData.title}
+            Description: ${formData.description}
+            Due Date: ${formData.dueDate}
+            Today: ${new Date().toISOString().split('T')[0]}
+            Return ONLY the word of the priority level (e.g., "High").`,
+        });
+        const text = response.text?.trim();
+        if (text && ['Low', 'Medium', 'High', 'Urgent'].includes(text)) {
+            updateField('priority', text);
+        }
+    } catch (e) {
+        console.error("AI Suggestion failed", e);
+    } finally {
+        setIsAiSuggesting(false);
+    }
+  };
+
   const autoCategorizeList = () => {
     if (formData.list && formData.list !== 'General') return;
     const lowerTitle = formData.title.toLowerCase();
@@ -634,7 +663,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><MoreHorizontal size={20} /></button>
                     <ActionMenu 
                         isOpen={isMenuOpen} 
-                        onClose={() => setIsMenuOpen(false)}
+                        onClose={() => setIsMenuOpen(false)} 
                         onShare={() => onAction?.('share', formData)}
                         onClone={() => onAction?.('clone', formData)}
                         onArchive={() => onAction?.('archive', formData)}
@@ -754,7 +783,20 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
 
             <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-4">
                 <div className="flex gap-3"><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Assignee</label><select value={formData.assignee} onChange={(e) => updateField('assignee', e.target.value)} className="w-full bg-slate-50 p-2 rounded-lg text-sm"><option value="Me">Me</option><option value="AI Agent">AI Agent</option><option value="Team">Team</option></select></div><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Due Date</label><div className="flex gap-2"><CustomDatePicker value={formData.dueDate} onChange={(val: any) => updateField('dueDate', val)} compact className="flex-1" /><CustomTimePicker value={formData.dueTime || ''} onChange={(val: any) => updateField('dueTime', val)} compact className="w-20" /></div></div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Priority</label><div className="flex gap-2">{['Low', 'Medium', 'High', 'Urgent'].map(p => (<button key={p} onClick={() => updateField('priority', p)} className={`flex-1 py-2 rounded-lg border text-xs font-bold ${formData.priority === p ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-slate-100 text-slate-400'}`}>{p}</button>))}</div></div>
+                <div>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-xs font-bold text-slate-500">Priority</label>
+                        <button 
+                            onClick={handleAiSuggestPriority}
+                            disabled={isAiSuggesting || !formData.title}
+                            className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition-colors"
+                        >
+                            {isAiSuggesting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                            AI Suggest
+                        </button>
+                    </div>
+                    <div className="flex gap-2">{['Low', 'Medium', 'High', 'Urgent'].map(p => (<button key={p} onClick={() => updateField('priority', p)} className={`flex-1 py-2 rounded-lg border text-xs font-bold ${formData.priority === p ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-slate-100 text-slate-400'}`}>{p}</button>))}</div>
+                </div>
                 
                 <div><div className="flex justify-between mb-2"><h3 className="font-bold text-sm">Subtasks</h3><span className="text-xs bg-slate-100 px-2 py-1 rounded-full">{formData.subtasks?.filter(s => s.completed).length || 0}/{formData.subtasks?.length || 0}</span></div><div className="space-y-2">{formData.subtasks?.map(st => (<div key={st.id} className="flex gap-2"><input type="checkbox" checked={st.completed} onChange={() => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, completed: !s.completed} : s); updateField('subtasks', newSt); }} /><input value={st.text} onChange={(e) => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, text: e.target.value} : s); updateField('subtasks', newSt); }} className="flex-1 bg-transparent text-sm border-none p-0 focus:ring-0" /></div>))}</div><button onClick={() => updateField('subtasks', [...(formData.subtasks || []), {id: Date.now().toString(), text: '', completed: false}])} className="text-primary text-sm font-bold mt-2">+ Add Subtask</button></div>
 
@@ -857,6 +899,144 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   );
 };
 
+const TaskRow = ({ task, onUpdateTask, onAction, onEdit }: any) => {
+    const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
+
+    const handleSave = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSaveState('saved');
+        setTimeout(() => setSaveState('idle'), 2000);
+        onUpdateTask(task);
+    };
+
+    const handleInlineUpdate = (field: string, value: any) => {
+        let updates: any = {};
+        if (field.startsWith('budget.')) {
+            const budgetKey = field.split('.')[1];
+            const currentBudget = task.budget || { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' };
+            const newBudget = { ...currentBudget, [budgetKey]: value };
+            
+            const agreed = parseFloat(newBudget.agreed as any) || 0;
+            const advance = parseFloat(newBudget.advance as any) || 0;
+            const balance = agreed - advance;
+            
+            if (agreed > 0 && balance <= 0) {
+                newBudget.status = 'Paid in Full';
+            } else if (advance > 0) {
+                newBudget.status = 'Advance Paid';
+            } else {
+                newBudget.status = 'Pending';
+            }
+            updates.budget = newBudget;
+        } else {
+            updates[field] = value;
+        }
+        onUpdateTask({ ...task, ...updates });
+    };
+
+    const balance = (task.budget?.agreed || 0) - (task.budget?.advance || 0);
+
+    return (
+        <tr className="hover:bg-slate-50 transition-colors group">
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <Toggle enabled={task.aiCoordination} onToggle={() => handleInlineUpdate('aiCoordination', !task.aiCoordination)} size="sm" />
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <input className="bg-transparent w-full focus:outline-none font-medium text-slate-700 truncate" value={task.title} onChange={e => handleInlineUpdate('title', e.target.value)} onClick={onEdit} />
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className="bg-transparent w-full focus:outline-none text-xs text-slate-600 cursor-pointer appearance-none" value={task.assignee} onChange={e => handleInlineUpdate('assignee', e.target.value)}>
+                    <option value="Me">Me</option>
+                    <option value="AI Agent">AI Agent</option>
+                    <option value="Team">Team</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none rounded px-2 py-1 ${task.status === 'Done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`} value={task.status} onChange={e => handleInlineUpdate('status', e.target.value)}>
+                    <option value="Draft">Draft</option>
+                    <option value="Todo">Todo</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Done">Done</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none ${task.priority === 'Urgent' ? 'text-red-600' : task.priority === 'High' ? 'text-orange-500' : 'text-slate-500'}`} value={task.priority} onChange={e => handleInlineUpdate('priority', e.target.value)}>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex flex-col items-start gap-1">
+                    <CustomDatePicker value={task.dueDate} onChange={(val: any) => handleInlineUpdate('dueDate', val)} compact />
+                    <CustomTimePicker value={task.dueTime || ''} onChange={(val: any) => handleInlineUpdate('dueTime', val)} compact />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-slate-500">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.planned || ''} onChange={e => handleInlineUpdate('budget.planned', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-slate-700 font-medium">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.agreed || ''} onChange={e => handleInlineUpdate('budget.agreed', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-green-600">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.advance || ''} onChange={e => handleInlineUpdate('budget.advance', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className={`text-xs font-bold ${balance > 0 ? 'text-red-500' : 'text-slate-400'}`}>${balance.toLocaleString()}</div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <CustomDatePicker value={task.budget?.paymentDueDate || ''} onChange={(val: any) => handleInlineUpdate('budget.paymentDueDate', val)} compact />
+            </td>
+            <td className="px-4 py-2 text-center">
+                <div className="flex items-center justify-center gap-1 relative z-10">
+                    <button onClick={handleSave} className={`p-1.5 rounded-lg transition-colors ${saveState === 'saved' ? 'text-green-600 bg-green-50' : 'text-slate-400 hover:text-primary hover:bg-slate-100'}`} title="Save Changes">
+                        {saveState === 'saved' ? <Check size={16} /> : <Save size={16} />}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); onAction('clone', task); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors" title="Clone Task">
+                        <CopyPlus size={16} />
+                    </button>
+                    <button 
+                        onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            onAction('delete', task); 
+                        }} 
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" 
+                        title="Delete Task"
+                    >
+                        <Trash2 size={16} className="pointer-events-none" />
+                    </button>
+                </div>
+            </td>
+        </tr>
+    );
+};
+
+const NotificationToast = ({ message, onUndo, onClose }: any) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 10000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-5 fade-in duration-300">
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onUndo} className="text-sm font-bold text-primary hover:text-blue-300 transition-colors">Undo</button>
+      <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full"><X size={14}/></button>
+    </div>
+  );
+};
+
 const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, projects }: any) => {
     const displayTasks = useMemo(() => projectId ? tasks.filter((t: Task) => t.projectId === projectId) : tasks, [tasks, projectId]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -898,31 +1078,6 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
     const handleDragStart = (e: any, id: string) => { e.dataTransfer.setData('taskId', id); };
     const handleDrop = (e: any, list: string) => { const id = e.dataTransfer.getData('taskId'); const t = tasks.find((t: Task) => t.id === id); if(t) onUpdateTask({...t, list}); };
 
-    const handleInlineUpdate = (task: Task, field: string, value: any) => {
-        let updates: any = {};
-        if (field.startsWith('budget.')) {
-            const budgetKey = field.split('.')[1];
-            const currentBudget = task.budget || { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' };
-            const newBudget = { ...currentBudget, [budgetKey]: value };
-            
-            const agreed = parseFloat(newBudget.agreed as any) || 0;
-            const advance = parseFloat(newBudget.advance as any) || 0;
-            const balance = agreed - advance;
-            
-            if (agreed > 0 && balance <= 0) {
-                newBudget.status = 'Paid in Full';
-            } else if (advance > 0) {
-                newBudget.status = 'Advance Paid';
-            } else {
-                newBudget.status = 'Pending';
-            }
-            updates.budget = newBudget;
-        } else {
-            updates[field] = value;
-        }
-        onUpdateTask({ ...task, ...updates });
-    };
-
     const handleTaskAction = (action: string, task: Task) => {
         switch (action) {
             case 'share':
@@ -939,10 +1094,9 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
                 setIsModalOpen(false);
                 break;
             case 'delete':
-                if (confirm('Delete this task?')) {
-                    onDeleteTask(task.id);
-                    setIsModalOpen(false);
-                }
+                // Confirmation is now handled in App.tsx to ensure logic consistency
+                onDeleteTask(task.id);
+                setIsModalOpen(false);
                 break;
         }
     };
@@ -1007,78 +1161,20 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
                                     <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Agreed</th>
                                     <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Advance</th>
                                     <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Balance</th>
-                                    <th className="px-4 py-3 text-left w-36 border-b border-slate-200">Due Date</th>
+                                    <th className="px-4 py-3 text-left w-36 border-b border-slate-200">Payment Due</th>
+                                    <th className="px-4 py-3 text-center w-32 border-b border-slate-200">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {processedTasks.map((t: Task) => {
-                                    const agreed = t.budget?.agreed || 0;
-                                    const advance = t.budget?.advance || 0;
-                                    const balance = agreed - advance;
-                                    return (
-                                        <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <Toggle enabled={t.aiCoordination} onToggle={() => handleInlineUpdate(t, 'aiCoordination', !t.aiCoordination)} size="sm" />
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <input className="bg-transparent w-full focus:outline-none font-medium text-slate-700 truncate" value={t.title} onChange={e => handleInlineUpdate(t, 'title', e.target.value)} onClick={() => { setEditingTask(t); setIsModalOpen(true); }} />
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <select className="bg-transparent w-full focus:outline-none text-xs text-slate-600 cursor-pointer appearance-none" value={t.assignee} onChange={e => handleInlineUpdate(t, 'assignee', e.target.value)}>
-                                                    <option value="Me">Me</option>
-                                                    <option value="AI Agent">AI Agent</option>
-                                                    <option value="Team">Team</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none rounded px-2 py-1 ${t.status === 'Done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`} value={t.status} onChange={e => handleInlineUpdate(t, 'status', e.target.value)}>
-                                                    <option value="Draft">Draft</option>
-                                                    <option value="Todo">Todo</option>
-                                                    <option value="In Progress">In Progress</option>
-                                                    <option value="Done">Done</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none ${t.priority === 'Urgent' ? 'text-red-600' : t.priority === 'High' ? 'text-orange-500' : 'text-slate-500'}`} value={t.priority} onChange={e => handleInlineUpdate(t, 'priority', e.target.value)}>
-                                                    <option value="Low">Low</option>
-                                                    <option value="Medium">Medium</option>
-                                                    <option value="High">High</option>
-                                                    <option value="Urgent">Urgent</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <div className="flex flex-col items-start gap-1">
-                                                    <CustomDatePicker value={t.dueDate} onChange={(val: any) => handleInlineUpdate(t, 'dueDate', val)} compact />
-                                                    <CustomTimePicker value={t.dueTime || ''} onChange={(val: any) => handleInlineUpdate(t, 'dueTime', val)} compact />
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <div className="flex items-center text-xs text-slate-500">
-                                                    <span className="mr-1">$</span>
-                                                    <input type="number" className="bg-transparent w-full focus:outline-none" value={t.budget?.planned || ''} onChange={e => handleInlineUpdate(t, 'budget.planned', e.target.value)} placeholder="0" />
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <div className="flex items-center text-xs text-slate-700 font-medium">
-                                                    <span className="mr-1">$</span>
-                                                    <input type="number" className="bg-transparent w-full focus:outline-none" value={t.budget?.agreed || ''} onChange={e => handleInlineUpdate(t, 'budget.agreed', e.target.value)} placeholder="0" />
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <div className="flex items-center text-xs text-green-600">
-                                                    <span className="mr-1">$</span>
-                                                    <input type="number" className="bg-transparent w-full focus:outline-none" value={t.budget?.advance || ''} onChange={e => handleInlineUpdate(t, 'budget.advance', e.target.value)} placeholder="0" />
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                                                <div className={`text-xs font-bold ${balance > 0 ? 'text-red-500' : 'text-slate-400'}`}>${balance.toLocaleString()}</div>
-                                            </td>
-                                            <td className="px-4 py-2">
-                                                <CustomDatePicker value={t.budget?.paymentDueDate || ''} onChange={(val: any) => handleInlineUpdate(t, 'budget.paymentDueDate', val)} compact />
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                {processedTasks.map((t: Task) => (
+                                    <TaskRow 
+                                        key={t.id} 
+                                        task={t} 
+                                        onUpdateTask={onUpdateTask} 
+                                        onAction={handleTaskAction}
+                                        onEdit={() => { setEditingTask(t); setIsModalOpen(true); }}
+                                    />
+                                ))}
                             </tbody>
                         </table>
                     </div>
@@ -1508,6 +1604,7 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  const [notification, setNotification] = useState<{message: string, onUndo: () => void, id: number} | null>(null);
 
   const projectsWithRisk = useMemo(() => {
     return projects.map(p => {
@@ -1518,9 +1615,58 @@ const App = () => {
 
   const handleUpdateTask = (updatedTask: Task) => setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
   const handleAddTask = (newTask: Task) => setTasks(prev => [newTask, ...prev]);
-  const handleDeleteTask = (taskId: string) => setTasks(prev => prev.filter(t => t.id !== taskId));
+  
+  const handleDeleteTask = (taskId: string) => {
+    if (!taskId) return;
+
+    // 1. Capture the task for potential undo
+    const taskToDelete = tasks.find(t => t.id === taskId);
+    
+    // 2. Ask for confirmation
+    const confirmMessage = taskToDelete 
+        ? `Are you sure you want to delete "${taskToDelete.title}"?`
+        : "Are you sure you want to delete this task?";
+
+    if (window.confirm(confirmMessage)) {
+        // 3. Perform Deletion
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+
+        // 4. Show Notification with Undo
+        if (taskToDelete) {
+            setNotification({
+                message: "Task deleted",
+                onUndo: () => {
+                    setTasks(prev => [...prev, taskToDelete]);
+                    setNotification(null);
+                },
+                id: Date.now()
+            });
+        }
+    }
+  };
+
   const handleUpdateProject = (updatedProject: Project) => setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-  const handleDeleteProject = (projectId: string) => { if (confirm('Are you sure you want to delete this project?')) setProjects(prev => prev.filter(p => p.id !== projectId)); };
+  
+  const handleDeleteProject = (projectId: string) => { 
+      if (window.confirm('Are you sure you want to delete this project?')) {
+          const projectToDelete = projects.find(p => p.id === projectId);
+          if (projectToDelete) {
+              setProjects(prev => prev.filter(p => p.id !== projectId));
+              setNotification({
+                message: 'Project deleted',
+                onUndo: () => {
+                    setProjects(prev => {
+                         if (prev.find(p => p.id === projectId)) return prev;
+                         return [...prev, projectToDelete];
+                    });
+                    setNotification(null);
+                },
+                id: Date.now()
+            });
+          }
+      }
+  };
+
   const handleCloneProject = (project: Project) => { const newId = `PROJ-${Date.now()}`; setProjects(prev => [...prev, { ...project, id: newId, title: `${project.title} (Copy)`, status: 'Draft', progress: 0 }]); };
   const handleCreateProject = (data: NewProjectPayload) => {
       const newId = `PROJ-${Date.now()}`;
@@ -1548,12 +1694,14 @@ const App = () => {
         </nav>
         <div className="p-3 border-t border-slate-50 space-y-1"><SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeView === 'settings'} onClick={() => setActiveView('settings')} />{isSidebarOpen && (<div className="mt-4 flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">JD</div><div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-900 truncate">John Doe</div><div className="text-[10px] text-slate-500 truncate">john@example.com</div></div></div>)}</div>
       </aside>
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-slate-50/50 p-6">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-slate-50/50 p-6 relative">
         {activeView === 'dashboard' && <div className="flex-1 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl m-4 animate-in fade-in zoom-in-95 duration-500"><LayoutDashboard size={48} className="mb-4 text-slate-200" /><h2 className="text-xl font-bold text-slate-600">Dashboard</h2><p className="text-sm">Widgets coming soon.</p></div>}
         {activeView === 'projects' && (selectedProjectId ? <ProjectDetailView projectId={selectedProjectId} onBack={() => setSelectedProjectId(null)} tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projectsWithRisk} onUpdateProject={handleUpdateProject} /> : <ProjectsView projects={projectsWithRisk} tasks={tasks} onSelectProject={navigateToProject} onCreateProject={handleCreateProject} onDeleteProject={handleDeleteProject} onUpdateProject={handleUpdateProject} onCloneProject={handleCloneProject} />)}
         {activeView === 'tasks' && <TasksView tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projectsWithRisk} />}
         {activeView === 'leads' && <LeadsView />}
         {(activeView === 'contacts' || activeView === 'automation' || activeView === 'settings') && <div className="flex-1 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl m-4 animate-in fade-in zoom-in-95 duration-500"><Bot size={48} className="mb-4 text-slate-200" /><h2 className="text-xl font-bold text-slate-600">Coming Soon</h2><p className="text-sm">The {activeView} module is under construction.</p></div>}
+        
+        {notification && <NotificationToast message={notification.message} onUndo={notification.onUndo} onClose={() => setNotification(null)} key={notification.id} />}
       </main>
     </div>
   );
