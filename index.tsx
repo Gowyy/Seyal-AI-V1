@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { 
   X, Share2, MoreHorizontal, List as ListIcon, ChevronDown, Check, Plus, 
   Bot, MessageCircle, Phone, Repeat, History as HistoryIcon, 
@@ -8,12 +8,18 @@ import {
   LayoutDashboard, CheckSquare, Users, Settings, Zap, Briefcase,
   ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
   Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
-  Save, Building2, MapPin
+  Save, Building2, MapPin, Clock, Mail, FileText, Play, Pause,
+  GripVertical, Wand2
 } from 'lucide-react';
+
+// --- Polyfill for process.env ---
+if (typeof process === 'undefined') {
+  (window as any).process = { env: { API_KEY: '' } };
+}
 
 // --- Types ---
 
-type ViewState = 'dashboard' | 'projects' | 'leads' | 'contacts' | 'automation' | 'settings' | 'tasks';
+type ViewState = 'dashboard' | 'projects' | 'leads' | 'contacts' | 'automation' | 'settings' | 'tasks' | 'playbooks';
 
 type ProjectStatus = 'Draft' | 'Planning' | 'Ready' | 'Execution' | 'On Hold' | 'Completed' | 'Cancelled' | 'Archived';
 
@@ -153,6 +159,30 @@ interface NewProjectPayload {
   clientPhone?: string;
 }
 
+// --- Playbook Types ---
+interface PlaybookStep {
+  id: string;
+  order: number;
+  channel: 'email' | 'whatsapp' | 'voice' | 'internal_task';
+  trigger: {
+    type: 'delay';
+    value: number; // value in hours
+    unit: 'hours' | 'days';
+  };
+  content: string; // Message template or task description
+  condition?: string;
+}
+
+interface Playbook {
+  id: string;
+  name: string;
+  description: string;
+  leadType: string;
+  isActive: boolean;
+  steps: PlaybookStep[];
+  activeLeadsCount: number;
+}
+
 // --- Mock Data ---
 
 const AVAILABLE_LISTS = ['General', 'Marketing', 'Sales', 'Engineering', 'Design', 'HR', 'Finance'];
@@ -196,6 +226,35 @@ const MOCK_LEADS: Lead[] = [
     value: 5000,
     lastContact: '2023-11-12',
     probability: 20
+  }
+];
+
+const MOCK_PLAYBOOKS: Playbook[] = [
+  {
+    id: 'PB-001',
+    name: 'Wedding Lead Nurture',
+    description: 'High-touch sequence for wedding photography or planning leads.',
+    leadType: 'Wedding',
+    isActive: true,
+    activeLeadsCount: 12,
+    steps: [
+      { id: 's1', order: 1, channel: 'whatsapp', trigger: { type: 'delay', value: 0, unit: 'hours' }, content: "Hi {{lead_name}}, thanks for your inquiry! Here is our portfolio: {{portfolio_link}}. When is the big day?" },
+      { id: 's2', order: 2, channel: 'email', trigger: { type: 'delay', value: 1, unit: 'days' }, content: "Subject: Your Wedding Photography\n\nHi {{lead_name}}, just checking in. We have a few slots left for this season." },
+      { id: 's3', order: 3, channel: 'voice', trigger: { type: 'delay', value: 2, unit: 'days' }, content: "AI Call: Politely ask if they have booked a photographer yet and offer a free consultation." },
+    ]
+  },
+  {
+    id: 'PB-002',
+    name: 'B2B SaaS Demo',
+    description: 'Professional follow-up sequence for software demo requests.',
+    leadType: 'SaaS',
+    isActive: true,
+    activeLeadsCount: 5,
+    steps: [
+      { id: 's1', order: 1, channel: 'email', trigger: { type: 'delay', value: 0, unit: 'hours' }, content: "Subject: Demo Request Received\n\nHi {{lead_name}}, thanks for your interest. You can book your demo here: {{calendar_link}}." },
+      { id: 's2', order: 2, channel: 'internal_task', trigger: { type: 'delay', value: 4, unit: 'hours' }, content: "Research prospect on LinkedIn and prepare discovery questions." },
+      { id: 's3', order: 3, channel: 'email', trigger: { type: 'delay', value: 2, unit: 'days' }, content: "Subject: Quick Question\n\nHi {{lead_name}}, are you looking to integrate with any specific CRM?" },
+    ]
   }
 ];
 
@@ -451,6 +510,153 @@ const SectionHeader = ({ title, subtitle, action }: any) => (
     {action}
   </div>
 );
+
+const NotificationToast = ({ message, onUndo, onClose }: { message: string, onUndo?: () => void, onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-4 z-[100] animate-in slide-in-from-bottom duration-300">
+      <div className="flex items-center gap-2">
+        <Check size={16} className="text-green-400" />
+        <span className="text-sm font-medium">{message}</span>
+      </div>
+      {onUndo && (
+        <button onClick={onUndo} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors">
+          UNDO
+        </button>
+      )}
+      <button onClick={onClose} className="text-slate-400 hover:text-white">
+        <X size={16} />
+      </button>
+    </div>
+  );
+};
+
+const TaskRow = ({ task, onUpdateTask, onAction, onEdit }: any) => {
+    const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
+
+    const handleSave = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSaveState('saved');
+        setTimeout(() => setSaveState('idle'), 2000);
+        onUpdateTask(task);
+    };
+
+    const handleInlineUpdate = (field: string, value: any) => {
+        let updates: any = {};
+        if (field.startsWith('budget.')) {
+            const budgetKey = field.split('.')[1];
+            const currentBudget = task.budget || { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' };
+            const newBudget = { ...currentBudget, [budgetKey]: value };
+            
+            const agreed = parseFloat(newBudget.agreed as any) || 0;
+            const advance = parseFloat(newBudget.advance as any) || 0;
+            const balance = agreed - advance;
+            
+            if (agreed > 0 && balance <= 0) {
+                newBudget.status = 'Paid in Full';
+            } else if (advance > 0) {
+                newBudget.status = 'Advance Paid';
+            } else {
+                newBudget.status = 'Pending';
+            }
+            updates.budget = newBudget;
+        } else {
+            updates[field] = value;
+        }
+        onUpdateTask({ ...task, ...updates });
+    };
+
+    const balance = (task.budget?.agreed || 0) - (task.budget?.advance || 0);
+
+    return (
+        <tr className="hover:bg-slate-50 transition-colors group">
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <Toggle enabled={task.aiCoordination} onToggle={() => handleInlineUpdate('aiCoordination', !task.aiCoordination)} size="sm" />
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <input className="bg-transparent w-full focus:outline-none font-medium text-slate-700 truncate" value={task.title} onChange={e => handleInlineUpdate('title', e.target.value)} onClick={onEdit} />
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className="bg-transparent w-full focus:outline-none text-xs text-slate-600 cursor-pointer appearance-none" value={task.assignee} onChange={e => handleInlineUpdate('assignee', e.target.value)}>
+                    <option value="Me">Me</option>
+                    <option value="AI Agent">AI Agent</option>
+                    <option value="Team">Team</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none rounded px-2 py-1 ${task.status === 'Done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`} value={task.status} onChange={e => handleInlineUpdate('status', e.target.value)}>
+                    <option value="Draft">Draft</option>
+                    <option value="Todo">Todo</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Done">Done</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none ${task.priority === 'Urgent' ? 'text-red-600' : task.priority === 'High' ? 'text-orange-500' : 'text-slate-500'}`} value={task.priority} onChange={e => handleInlineUpdate('priority', e.target.value)}>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                </select>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex flex-col items-start gap-1">
+                    <CustomDatePicker value={task.dueDate} onChange={(val: any) => handleInlineUpdate('dueDate', val)} compact />
+                    <CustomTimePicker value={task.dueTime || ''} onChange={(val: any) => handleInlineUpdate('dueTime', val)} compact />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-slate-500">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.planned || ''} onChange={e => handleInlineUpdate('budget.planned', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-slate-700 font-medium">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.agreed || ''} onChange={e => handleInlineUpdate('budget.agreed', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className="flex items-center text-xs text-green-600">
+                    <span className="mr-1">$</span>
+                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.advance || ''} onChange={e => handleInlineUpdate('budget.advance', e.target.value)} placeholder="0" />
+                </div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <div className={`text-xs font-bold ${balance > 0 ? 'text-red-500' : 'text-slate-400'}`}>${balance.toLocaleString()}</div>
+            </td>
+            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
+                <CustomDatePicker value={task.budget?.paymentDueDate || ''} onChange={(val: any) => handleInlineUpdate('budget.paymentDueDate', val)} compact />
+            </td>
+            <td className="px-4 py-2 text-center">
+                <div className="flex items-center justify-center gap-1 relative z-10">
+                    <button onClick={handleSave} className={`p-1.5 rounded-lg transition-colors ${saveState === 'saved' ? 'text-green-600 bg-green-50' : 'text-slate-400 hover:text-primary hover:bg-slate-100'}`} title="Save Changes">
+                        {saveState === 'saved' ? <Check size={16} /> : <Save size={16} />}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); onAction('clone', task); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors" title="Clone Task">
+                        <CopyPlus size={16} />
+                    </button>
+                    <button 
+                        onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            onAction('delete', task); 
+                        }} 
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" 
+                        title="Delete Task"
+                    >
+                        <Trash2 size={16} className="pointer-events-none" />
+                    </button>
+                </div>
+            </td>
+        </tr>
+    );
+};
 
 const KanbanColumn = ({ list, count, tasks, onDrop, onDragStart, onEditTask, onNewTask }: any) => (
   <div 
@@ -905,144 +1111,6 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   );
 };
 
-const TaskRow = ({ task, onUpdateTask, onAction, onEdit }: any) => {
-    const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
-
-    const handleSave = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setSaveState('saved');
-        setTimeout(() => setSaveState('idle'), 2000);
-        onUpdateTask(task);
-    };
-
-    const handleInlineUpdate = (field: string, value: any) => {
-        let updates: any = {};
-        if (field.startsWith('budget.')) {
-            const budgetKey = field.split('.')[1];
-            const currentBudget = task.budget || { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' };
-            const newBudget = { ...currentBudget, [budgetKey]: value };
-            
-            const agreed = parseFloat(newBudget.agreed as any) || 0;
-            const advance = parseFloat(newBudget.advance as any) || 0;
-            const balance = agreed - advance;
-            
-            if (agreed > 0 && balance <= 0) {
-                newBudget.status = 'Paid in Full';
-            } else if (advance > 0) {
-                newBudget.status = 'Advance Paid';
-            } else {
-                newBudget.status = 'Pending';
-            }
-            updates.budget = newBudget;
-        } else {
-            updates[field] = value;
-        }
-        onUpdateTask({ ...task, ...updates });
-    };
-
-    const balance = (task.budget?.agreed || 0) - (task.budget?.advance || 0);
-
-    return (
-        <tr className="hover:bg-slate-50 transition-colors group">
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <Toggle enabled={task.aiCoordination} onToggle={() => handleInlineUpdate('aiCoordination', !task.aiCoordination)} size="sm" />
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <input className="bg-transparent w-full focus:outline-none font-medium text-slate-700 truncate" value={task.title} onChange={e => handleInlineUpdate('title', e.target.value)} onClick={onEdit} />
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <select className="bg-transparent w-full focus:outline-none text-xs text-slate-600 cursor-pointer appearance-none" value={task.assignee} onChange={e => handleInlineUpdate('assignee', e.target.value)}>
-                    <option value="Me">Me</option>
-                    <option value="AI Agent">AI Agent</option>
-                    <option value="Team">Team</option>
-                </select>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none rounded px-2 py-1 ${task.status === 'Done' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`} value={task.status} onChange={e => handleInlineUpdate('status', e.target.value)}>
-                    <option value="Draft">Draft</option>
-                    <option value="Todo">Todo</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Done">Done</option>
-                </select>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <select className={`bg-transparent w-full focus:outline-none text-xs font-bold cursor-pointer appearance-none ${task.priority === 'Urgent' ? 'text-red-600' : task.priority === 'High' ? 'text-orange-500' : 'text-slate-500'}`} value={task.priority} onChange={e => handleInlineUpdate('priority', e.target.value)}>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Urgent">Urgent</option>
-                </select>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <div className="flex flex-col items-start gap-1">
-                    <CustomDatePicker value={task.dueDate} onChange={(val: any) => handleInlineUpdate('dueDate', val)} compact />
-                    <CustomTimePicker value={task.dueTime || ''} onChange={(val: any) => handleInlineUpdate('dueTime', val)} compact />
-                </div>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <div className="flex items-center text-xs text-slate-500">
-                    <span className="mr-1">$</span>
-                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.planned || ''} onChange={e => handleInlineUpdate('budget.planned', e.target.value)} placeholder="0" />
-                </div>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <div className="flex items-center text-xs text-slate-700 font-medium">
-                    <span className="mr-1">$</span>
-                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.agreed || ''} onChange={e => handleInlineUpdate('budget.agreed', e.target.value)} placeholder="0" />
-                </div>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <div className="flex items-center text-xs text-green-600">
-                    <span className="mr-1">$</span>
-                    <input type="number" className="bg-transparent w-full focus:outline-none" value={task.budget?.advance || ''} onChange={e => handleInlineUpdate('budget.advance', e.target.value)} placeholder="0" />
-                </div>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <div className={`text-xs font-bold ${balance > 0 ? 'text-red-500' : 'text-slate-400'}`}>${balance.toLocaleString()}</div>
-            </td>
-            <td className="px-4 py-2 border-r border-transparent group-hover:border-slate-100">
-                <CustomDatePicker value={task.budget?.paymentDueDate || ''} onChange={(val: any) => handleInlineUpdate('budget.paymentDueDate', val)} compact />
-            </td>
-            <td className="px-4 py-2 text-center">
-                <div className="flex items-center justify-center gap-1 relative z-10">
-                    <button onClick={handleSave} className={`p-1.5 rounded-lg transition-colors ${saveState === 'saved' ? 'text-green-600 bg-green-50' : 'text-slate-400 hover:text-primary hover:bg-slate-100'}`} title="Save Changes">
-                        {saveState === 'saved' ? <Check size={16} /> : <Save size={16} />}
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); onAction('clone', task); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors" title="Clone Task">
-                        <CopyPlus size={16} />
-                    </button>
-                    <button 
-                        onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            onAction('delete', task); 
-                        }} 
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" 
-                        title="Delete Task"
-                    >
-                        <Trash2 size={16} className="pointer-events-none" />
-                    </button>
-                </div>
-            </td>
-        </tr>
-    );
-};
-
-const NotificationToast = ({ message, onUndo, onClose }: any) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 10000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className="fixed bottom-6 right-6 z-[200] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-5 fade-in duration-300">
-      <span className="text-sm font-medium">{message}</span>
-      <button onClick={onUndo} className="text-sm font-bold text-primary hover:text-blue-300 transition-colors">Undo</button>
-      <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full"><X size={14}/></button>
-    </div>
-  );
-};
-
 const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, projects }: any) => {
     const displayTasks = useMemo(() => projectId ? tasks.filter((t: Task) => t.projectId === projectId) : tasks, [tasks, projectId]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1199,6 +1267,36 @@ const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, pr
     );
 };
 
+const ActivityFeed = ({ logs }: any) => {
+    if (!logs || logs.length === 0) return <div className="p-8 text-center text-slate-400 text-sm">No activity recorded yet.</div>;
+    
+    return (
+        <div className="space-y-6 pt-2">
+            <div className="relative pl-6 border-l border-slate-200 space-y-8">
+                {logs.map((log: any) => (
+                    <div key={log.id} className="relative group">
+                        <div className={`absolute -left-[29px] w-4 h-4 rounded-full border-2 border-white ring-1 ring-slate-100 transition-colors ${
+                            log.type === 'creation' ? 'bg-blue-500' :
+                            log.type === 'ai_action' ? 'bg-purple-500' :
+                            log.type === 'status_change' ? 'bg-orange-500' : 'bg-slate-300'
+                        }`}></div>
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-slate-900">{log.user}</span>
+                                <span className="text-xs text-slate-500">{log.action}</span>
+                                <span className="text-[10px] text-slate-400">• {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 group-hover:bg-slate-100 transition-colors">
+                                {log.details}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, onDeleteTask, projects, onUpdateProject }: any) => {
     const project = projects.find((p: Project) => p.id === projectId);
     const [activeTab, setActiveTab] = useState<'plan' | 'budget' | 'activity'>('plan');
@@ -1249,57 +1347,42 @@ const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, 
     );
 };
 
-const NewProjectModal = ({ isOpen, onClose, onSubmit }: any) => {
-  const [formData, setFormData] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientType: 'Individual', companyName: '', clientName: '', clientEmail: '', clientStdCode: '+1', clientPhone: '' });
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  if (!isOpen) return null;
-  const handleSubmit = () => {
-    if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
-        alert('End date cannot be earlier than start date.');
-        return;
-    }
-    setIsAiLoading(true);
-    setTimeout(() => { onSubmit(formData); setIsAiLoading(false); onClose(); setFormData({ title: '', category: 'General', startDate: new Date().toISOString().split('T')[0], endDate: '', budget: 0, description: '', clientType: 'Individual', companyName: '', clientName: '', clientEmail: '', clientStdCode: '+1', clientPhone: '' }); }, 1500);
-  };
+const BudgetView = ({ project, tasks }: { project: Project, tasks: Task[] }) => {
+  const stats = useMemo(() => {
+    let committed = 0, spent = 0;
+    const byCategory: Record<string, { committed: number, spent: number, count: number }> = {};
+    tasks.forEach(t => {
+      const taskCommitted = t.budget?.agreed || 0;
+      const taskSpent = (t.budget?.status === 'Paid in Full' && t.budget?.agreed) ? t.budget.agreed : (t.budget?.advance || 0);
+      committed += taskCommitted; spent += taskSpent;
+      const cat = t.list || 'General';
+      if (!byCategory[cat]) byCategory[cat] = { committed: 0, spent: 0, count: 0 };
+      byCategory[cat].committed += taskCommitted; byCategory[cat].spent += taskSpent; byCategory[cat].count += 1;
+    });
+    return { committed, spent, remaining: project.budget.total - committed, categories: Object.entries(byCategory).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.committed - a.committed) };
+  }, [project, tasks]);
+
+  const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
+  let currentAngle = 0;
+  const pieGradient = `conic-gradient(${stats.categories.map((cat, i) => { const pct = (cat.committed / (stats.committed || 1)) * 100; const start = currentAngle; currentAngle += pct; return `${COLORS[i % COLORS.length]} ${start}% ${currentAngle}%`; }).join(', ')}${stats.categories.length ? '' : ', #e2e8f0 0% 100%'})`;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><div><h2 className="text-lg font-bold text-slate-900">New Project</h2><p className="text-xs text-slate-500">Define goals for the AI Planning Coach</p></div><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
-            <div className="p-6 space-y-4">
-               {isAiLoading ? (
-                   <div className="flex flex-col items-center justify-center py-10 space-y-4"><div className="w-16 h-16 relative"><div className="absolute inset-0 rounded-full border-4 border-slate-100"></div><div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div><Bot className="absolute inset-0 m-auto text-primary" size={24}/></div><div className="text-center"><h3 className="text-sm font-bold text-slate-800">AI Planning Coach is working...</h3><p className="text-xs text-slate-500 mt-1">Generating tasks, budget breakdown, and timeline.</p></div></div>
-               ) : (
-                   <>
-                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="e.g. Summer Marketing Campaign" autoFocus /></div>
-                        <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><div className="relative"><span className="absolute left-3 top-2 text-slate-400 text-sm">$</span><input type="number" value={formData.budget || ''} onChange={e => setFormData({...formData, budget: parseFloat(e.target.value) || 0})} className="w-full pl-6 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0.00" /></div></div></div>
-                        <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
-                        <div className="pt-2 border-t border-slate-100 mt-2">
-                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-xs font-bold text-slate-500 uppercase">Client Details</div>
-                                <div className="flex bg-slate-100 p-0.5 rounded-lg">
-                                    <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
-                                    <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
-                                </div>
-                             </div>
-                             <div className="grid grid-cols-1 gap-3">
-                                 {formData.clientType === 'Company' && (
-                                     <div><input type="text" value={formData.companyName || ''} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Company Name" /></div>
-                                 )}
-                                 <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder={formData.clientType === 'Company' ? "Contact Person Name" : "Client Name"} /></div>
-                                 <div className="grid grid-cols-2 gap-3">
-                                     <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
-                                     <div className="flex gap-2">
-                                        <input type="text" value={formData.clientStdCode || '+1'} onChange={e => setFormData({...formData, clientStdCode: e.target.value})} className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" placeholder="+1" />
-                                        <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Mobile Number" />
-                                     </div>
-                                 </div>
-                             </div>
-                        </div>
-                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 mt-2">Description</label><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Describe the goals and scope..." /></div>
-                   </>
-               )}
+    <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Budget</div><div className="text-xl font-bold text-slate-900">${project.budget.total.toLocaleString()}</div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Committed</div><div className="text-xl font-bold text-blue-600">${stats.committed.toLocaleString()}</div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Spent</div><div className="text-xl font-bold text-green-600">${stats.spent.toLocaleString()}</div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Remaining</div><div className={`text-xl font-bold ${stats.remaining < 0 ? 'text-red-600' : 'text-slate-700'}`}>${stats.remaining.toLocaleString()}</div></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center">
+                <h3 className="text-sm font-bold text-slate-700 mb-6 w-full text-left">Budget Distribution</h3>
+                <div className="relative w-48 h-48 rounded-full mb-6" style={{ background: pieGradient }}><div className="absolute inset-4 bg-white rounded-full flex flex-col items-center justify-center"><span className="text-xs text-slate-400 font-bold uppercase">Committed</span><span className="text-xl font-bold text-slate-800">${stats.committed.toLocaleString()}</span></div></div>
             </div>
-            {!isAiLoading && (<div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleSubmit} disabled={!formData.title} className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"><Sparkles size={16} /><span>Start Planning Coach</span></button></div>)}
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                 <h3 className="text-sm font-bold text-slate-700 mb-6">Category Breakdown</h3>
+                 <div className="space-y-6">{stats.categories.map((cat, i) => { const pct = project.budget.total > 0 ? (cat.committed / project.budget.total) * 100 : 0; return (<div key={cat.name}><div className="flex justify-between text-sm mb-1.5"><span className="font-bold text-slate-700">{cat.name}</span><span className="text-slate-500">{cat.count} Tasks • <span className="text-slate-900 font-bold">${cat.committed.toLocaleString()}</span></span></div><div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}></div></div></div>); })}</div>
+            </div>
         </div>
     </div>
   );
@@ -1358,387 +1441,576 @@ const EditProjectModal = ({ isOpen, onClose, project, onSave }: any) => {
   );
 };
 
-const BudgetView = ({ project, tasks }: { project: Project, tasks: Task[] }) => {
-  const stats = useMemo(() => {
-    let committed = 0, spent = 0;
-    const byCategory: Record<string, { committed: number, spent: number, count: number }> = {};
-    tasks.forEach(t => {
-      const taskCommitted = t.budget?.agreed || 0;
-      const taskSpent = (t.budget?.status === 'Paid in Full' && t.budget?.agreed) ? t.budget.agreed : (t.budget?.advance || 0);
-      committed += taskCommitted; spent += taskSpent;
-      const cat = t.list || 'General';
-      if (!byCategory[cat]) byCategory[cat] = { committed: 0, spent: 0, count: 0 };
-      byCategory[cat].committed += taskCommitted; byCategory[cat].spent += taskSpent; byCategory[cat].count += 1;
-    });
-    return { committed, spent, remaining: project.budget.total - committed, categories: Object.entries(byCategory).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.committed - a.committed) };
-  }, [project, tasks]);
-
-  const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
-  let currentAngle = 0;
-  const pieGradient = `conic-gradient(${stats.categories.map((cat, i) => { const pct = (cat.committed / (stats.committed || 1)) * 100; const start = currentAngle; currentAngle += pct; return `${COLORS[i % COLORS.length]} ${start}% ${currentAngle}%`; }).join(', ')}${stats.categories.length ? '' : ', #e2e8f0 0% 100%'})`;
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Budget</div><div className="text-xl font-bold text-slate-900">${project.budget.total.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Committed</div><div className="text-xl font-bold text-blue-600">${stats.committed.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Spent</div><div className="text-xl font-bold text-green-600">${stats.spent.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Remaining</div><div className={`text-xl font-bold ${stats.remaining < 0 ? 'text-red-600' : 'text-slate-700'}`}>${stats.remaining.toLocaleString()}</div></div>
+const ProjectCard = ({ project, onClick, onAction }: any) => (
+    <div onClick={onClick} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col h-full relative">
+        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={(e) => { e.stopPropagation(); onAction('edit', project); }} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg"><MoreHorizontal size={16}/></button>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center">
-                <h3 className="text-sm font-bold text-slate-700 mb-6 w-full text-left">Budget Distribution</h3>
-                <div className="relative w-48 h-48 rounded-full mb-6" style={{ background: pieGradient }}><div className="absolute inset-4 bg-white rounded-full flex flex-col items-center justify-center"><span className="text-xs text-slate-400 font-bold uppercase">Committed</span><span className="text-xl font-bold text-slate-800">${stats.committed.toLocaleString()}</span></div></div>
-            </div>
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                 <h3 className="text-sm font-bold text-slate-700 mb-6">Category Breakdown</h3>
-                 <div className="space-y-6">{stats.categories.map((cat, i) => { const pct = project.budget.total > 0 ? (cat.committed / project.budget.total) * 100 : 0; return (<div key={cat.name}><div className="flex justify-between text-sm mb-1.5"><span className="font-bold text-slate-700">{cat.name}</span><span className="text-slate-500">{cat.count} Tasks • <span className="text-slate-900 font-bold">${cat.committed.toLocaleString()}</span></span></div><div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}></div></div></div>); })}</div>
-            </div>
+        <div className="mb-3"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${project.status === 'Execution' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{project.status}</span></div>
+        <h3 className="font-bold text-lg text-slate-800 mb-1">{project.title}</h3>
+        <p className="text-xs text-slate-500 mb-4 line-clamp-2">{project.description}</p>
+        <div className="mt-auto pt-3 border-t border-slate-50">
+             <div className="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>Progress</span><span>{project.progress}%</span></div>
+             <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3"><div className="h-full bg-primary rounded-full" style={{ width: `${project.progress}%` }}></div></div>
+             <div className="flex items-center justify-between text-xs"><span className="font-bold text-slate-700">${project.budget.committed.toLocaleString()}</span><span className="text-slate-400">Due {formatDateDisplay(project.endDate)}</span></div>
         </div>
-    </div>
-  );
-};
-
-const ActivityFeed = ({ logs }: { logs: ActivityLogItem[] }) => (
-    <div className="max-w-3xl mx-auto p-2 space-y-6">
-        {logs.map((log) => (
-            <div key={log.id} className="relative pl-8 before:absolute before:left-3 before:top-8 before:bottom-[-24px] before:w-px before:bg-slate-200 last:before:hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className={`absolute left-0 top-1 w-6 h-6 rounded-full border-2 border-white shadow-sm flex items-center justify-center z-10 ${log.type === 'ai_action' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>{log.type === 'ai_action' ? <Sparkles size={12}/> : <MessageCircle size={12}/>}</div>
-                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                    <div className="flex justify-between items-start mb-1.5"><div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 uppercase tracking-wide">{new Date(log.timestamp).toLocaleDateString()}</span></div></div>
-                    <div className="flex items-start gap-2">
-                        {log.user === 'AI Agent' ? <div className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5"><Bot size={12} /></div> : <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5">{log.userInitials}</div>}
-                        <div><h4 className="text-sm text-slate-800 leading-snug"><span className="font-bold">{log.user}</span> {log.action}</h4><p className="text-xs text-slate-500 mt-1">{log.details}</p></div>
-                    </div>
-                </div>
-            </div>
-        ))}
     </div>
 );
 
-const LeadModal = ({ isOpen, onClose, lead, onSave }: { isOpen: boolean, onClose: () => void, lead: Lead | null, onSave: (lead: Lead) => void }) => {
-  const [formData, setFormData] = useState<Partial<Lead>>({ name: '', clientType: 'Company', company: '', email: '', phone: '', stdCode: '+91', country: '', status: 'New', source: 'Website', value: 0, probability: 0, location: '', serviceType: '', budgetRange: '', requirement: '' });
-  const [customService, setCustomService] = useState('');
-  
-  useEffect(() => { 
-      if (lead) {
-          setFormData(lead); 
-      } else {
-          // Default STD code logic based on simplistic locale check
-          const userLocale = navigator.language || 'en-US';
-          let defaultStd = '+1';
-          if (userLocale.includes('IN')) defaultStd = '+91';
-          else if (userLocale.includes('GB')) defaultStd = '+44';
-          else if (userLocale.includes('AU')) defaultStd = '+61';
-          
-          setFormData({ 
-              name: '', 
-              clientType: 'Company', 
-              company: '', 
-              email: '', 
-              phone: '', 
-              stdCode: defaultStd,
-              country: '',
-              status: 'New', 
-              source: 'Website', 
-              value: 0, 
-              probability: 0, 
-              location: '', 
-              serviceType: '', 
-              budgetRange: '', 
-              requirement: '', 
-              id: `LEAD-${Date.now()}` 
-          }); 
-      }
-  }, [lead, isOpen]);
+const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDeleteProject, onUpdateProject }: any) => {
+    const [isNewOpen, setIsNewOpen] = useState(false);
+    const [newProj, setNewProj] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: '', endDate: '', budget: 0, description: '' });
+    const handleCreate = () => { onCreateProject(newProj); setIsNewOpen(false); setNewProj({ title: '', category: 'General', startDate: '', endDate: '', budget: 0, description: '' }); };
 
-  const handleSave = () => {
-      let finalServiceType = formData.serviceType;
-      if (formData.serviceType === 'Not in list') {
-          finalServiceType = customService.trim();
-          if (finalServiceType && !AVAILABLE_SERVICES.includes(finalServiceType)) {
-              AVAILABLE_SERVICES.push(finalServiceType);
-          }
-      }
-
-      let finalClientType = formData.clientType;
-      // "If company name is not provided then its auto selected to individual"
-      if (formData.clientType === 'Company' && !formData.company?.trim()) {
-          finalClientType = 'Individual';
-      }
-
-      onSave({ ...formData, serviceType: finalServiceType, clientType: finalClientType } as Lead);
-      onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">{lead ? 'Edit Lead' : 'Lead Capture'}</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-          
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Name</label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" autoFocus /></div>
-          
-          <div className="flex items-center justify-between mb-1 mt-3">
-                <label className="block text-xs font-bold text-slate-500 uppercase">Client Type</label>
-                <div className="flex bg-slate-100 p-0.5 rounded-lg">
-                    <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
-                    <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
-                </div>
-          </div>
-          
-          {formData.clientType === 'Company' && (
-              <div className="animate-in fade-in slide-in-from-top-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Business / Organization Name</label><input type="text" value={formData.company || ''} onChange={(e) => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" /></div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
-              <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Mobile Number</label>
-                  <div className="flex gap-2">
-                      <input 
-                          type="text" 
-                          value={formData.stdCode || '+91'} 
-                          onChange={(e) => setFormData({...formData, stdCode: e.target.value})} 
-                          className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" 
-                          placeholder="+91"
-                      />
-                      <input 
-                          type="tel" 
-                          value={formData.phone} 
-                          onChange={(e) => setFormData({...formData, phone: e.target.value})} 
-                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" 
-                          placeholder="9876543210"
-                      />
-                  </div>
-              </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Location / City</label><input type="text" value={formData.location || ''} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Country</label><input type="text" value={formData.country || ''} onChange={(e) => setFormData({...formData, country: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" /></div>
-          </div>
-
-          <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Source</label>
-              <select value={formData.source} onChange={(e) => setFormData({...formData, source: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white mb-2"><option value="">Select...</option>{['LinkedIn', 'Website', 'Referral', 'Cold Call', 'Event'].map(s => <option key={s} value={s}>{s}</option>)}</select>
-          </div>
-
-          <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Service Type</label>
-              <select value={formData.serviceType} onChange={(e) => setFormData({...formData, serviceType: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white mb-2">
-                  <option value="">Select Service...</option>
-                  {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
-                  <option value="Not in list">Not in list</option>
-              </select>
-              {formData.serviceType === 'Not in list' && (
-                  <input type="text" value={customService} onChange={(e) => setCustomService(e.target.value)} placeholder="Enter Service Type" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary animate-in fade-in" />
-              )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label>
-                <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
-                    {['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+    return (
+        <div className="h-full flex flex-col animate-in fade-in">
+             <SectionHeader title="Projects" subtitle="Manage your engagements" action={<button onClick={() => setIsNewOpen(true)} className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2"><Plus size={18} /> New Project</button>} />
+             {isNewOpen && (
+                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in">
+                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                         <h2 className="text-lg font-bold mb-4">New Project</h2>
+                         <div className="space-y-3">
+                             <input className="w-full border p-2 rounded text-sm" placeholder="Title" value={newProj.title} onChange={e => setNewProj({...newProj, title: e.target.value})} />
+                             <select className="w-full border p-2 rounded text-sm" value={newProj.category} onChange={e => setNewProj({...newProj, category: e.target.value})}>{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                             <div className="grid grid-cols-2 gap-2"><input type="date" className="w-full border p-2 rounded text-sm" value={newProj.startDate} onChange={e => setNewProj({...newProj, startDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded text-sm" value={newProj.endDate} onChange={e => setNewProj({...newProj, endDate: e.target.value})} /></div>
+                             <input type="number" className="w-full border p-2 rounded text-sm" placeholder="Budget" value={newProj.budget || ''} onChange={e => setNewProj({...newProj, budget: parseFloat(e.target.value)})} />
+                             <textarea className="w-full border p-2 rounded text-sm h-24" placeholder="Description" value={newProj.description} onChange={e => setNewProj({...newProj, description: e.target.value})} />
+                         </div>
+                         <div className="mt-4 flex justify-end gap-2"><button onClick={() => setIsNewOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-500">Cancel</button><button onClick={handleCreate} className="px-4 py-2 text-sm font-bold bg-primary text-white rounded-lg">Create</button></div>
+                     </div>
+                 </div>
+             )}
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-4 custom-scrollbar">
+                 {projects.map((p: Project) => <ProjectCard key={p.id} project={p} onClick={() => onSelectProject(p.id)} onAction={(a: string) => a === 'edit' && onUpdateProject(p)} />)}
              </div>
-             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Budget Range</label>
-                <select value={formData.budgetRange} onChange={(e) => setFormData({...formData, budgetRange: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
-                    <option value="">Select...</option>
-                    <option value="<₹1L">{'<₹1L'}</option>
-                    <option value="₹1–5L">₹1–5L</option>
-                    <option value="₹5–10L">₹5–10L</option>
-                    <option value=">₹10L">{'>₹10L'}</option>
-                </select>
-             </div>
-          </div>
-
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Requirement</label><textarea value={formData.requirement || ''} onChange={(e) => setFormData({...formData, requirement: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Tell us about your requirement..." /></div>
-
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleSave} disabled={!formData.name} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 transition-all">Save Lead</button></div>
-      </div>
-    </div>
-  );
+    );
 };
 
-const LeadCard: React.FC<{ lead: Lead, onClick: () => void }> = ({ lead, onClick }) => (
-    <div onClick={onClick} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col gap-2 relative">
-      <div className="flex justify-between items-start"><h4 className="font-bold text-sm text-slate-800">{lead.name}</h4>{lead.probability && lead.probability > 70 && <span className="bg-orange-100 text-orange-600 p-1 rounded-full"><TrendingUp size={12} /></span>}</div>
-      {lead.company && <div className="flex items-center gap-1 text-xs text-slate-500"><Building2 size={10}/><span className="truncate">{lead.company}</span></div>}
-      {lead.location && <div className="flex items-center gap-1 text-xs text-slate-400"><MapPin size={10}/><span>{lead.location}</span>{lead.country && <span>, {lead.country}</span>}</div>}
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
-          <span className="text-xs font-bold text-slate-700">{lead.budgetRange || '$' + lead.value.toLocaleString()}</span>
-          {lead.serviceType && <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-medium truncate max-w-[100px]">{lead.serviceType}</span>}
-      </div>
+const LeadCard = ({ lead }: any) => (
+    <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+        <div className="flex justify-between items-start mb-1">
+            <span className="font-bold text-sm text-slate-800">{lead.name}</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${lead.probability >= 70 ? 'bg-green-100 text-green-700' : lead.probability >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{lead.probability}%</span>
+        </div>
+        <div className="text-xs text-slate-500 mb-2 font-medium">{lead.company || 'Individual'}</div>
+        <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-50 pt-2">
+            <span>{lead.source}</span>
+            <span className="font-bold text-slate-600">${lead.value.toLocaleString()}</span>
+        </div>
     </div>
 );
-
-const LeadKanbanColumn: React.FC<{ status: string, leads: Lead[], onEdit: (lead: Lead) => void }> = ({ status, leads, onEdit }) => (
-    <div className="flex-shrink-0 w-72 bg-slate-50/50 rounded-2xl border border-slate-100 flex flex-col max-h-full">
-      <div className="p-4 flex items-center justify-between border-b border-slate-100"><div className="flex items-center gap-2"><h4 className="font-bold text-sm text-slate-700">{status}</h4><span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">{leads.length}</span></div><span className="text-[10px] text-slate-400 font-medium">${leads.reduce((sum, l) => sum + l.value, 0).toLocaleString()}</span></div>
-      <div className="p-3 space-y-3 overflow-y-auto flex-1 custom-scrollbar">{leads.map(lead => <LeadCard key={lead.id} lead={lead} onClick={() => onEdit(lead)} />)}</div>
-    </div>
-);
-
-const ProjectCard = ({ project, onClick, onClone, onDelete, onUpdate, stats }: any) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
-  const handleShare = () => {
-      // In a real app, this would open a share modal
-      alert(`Sharing project "${project.title}" link copied to clipboard!`);
-  };
-  
-  return (
-    <>
-      <div onClick={onClick} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col h-full relative overflow-visible">
-        <div className={`absolute top-0 left-0 w-1 h-full rounded-l-2xl ${project.status === 'Execution' ? 'bg-green-500' : project.status === 'Planning' ? 'bg-blue-500' : project.status === 'High Risk' ? 'bg-red-500' : 'bg-slate-300'}`} />
-        <div className="flex justify-between items-start mb-3 pl-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-slate-800 truncate text-base mb-1">{project.title}</h3>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wide">{project.category}</span>
-          </div>
-          <div className="relative">
-             <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} className={`p-1.5 rounded-lg transition-colors ${isMenuOpen ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600 opacity-0 group-hover:opacity-100'}`}><MoreHorizontal size={18} /></button>
-             <ActionMenu 
-                isOpen={isMenuOpen} 
-                onClose={() => setIsMenuOpen(false)} 
-                onShare={handleShare} 
-                onClone={onClone} 
-                onArchive={() => onUpdate({...project, status: 'Archived'})} 
-                onDelete={onDelete} 
-                itemType="Project"
-             />
-          </div>
-        </div>
-        <div className="flex-1 pl-3">
-          <p className="text-xs text-slate-500 line-clamp-2 mb-4 h-10">{project.description || 'No description provided.'}</p>
-          
-          {stats && (
-            <div className="grid grid-cols-3 gap-2 mb-4 border-b border-slate-50 pb-3">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Tasks</span>
-                    <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
-                        <CheckSquare size={12} className="text-slate-400"/>
-                        {stats.taskCount}
-                    </div>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Budget</span>
-                    <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
-                        <Wallet size={12} className="text-slate-400"/>
-                        ${stats.committed.toLocaleString()}
-                    </div>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Overdue</span>
-                    <div className={`flex items-center gap-1 text-xs font-bold ${stats.overdueCount > 0 ? 'text-red-600' : 'text-slate-700'}`}>
-                        <AlertCircle size={12} className={stats.overdueCount > 0 ? 'text-red-500' : 'text-slate-400'}/>
-                        {stats.overdueCount}
-                    </div>
-                </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2"><span>Progress</span><span className="font-bold text-slate-700">{project.progress}%</span></div>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4"><div className={`h-full rounded-full transition-all duration-500 ${project.riskLevel === 'High' ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${project.progress}%` }}></div></div>
-          <div className="flex justify-between items-center pt-3 border-t border-slate-50">
-             <div className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400" /><span className="text-xs font-medium text-slate-600">{formatDateDisplay(project.startDate)}</span></div>
-             {project.riskLevel && <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${project.riskLevel === 'High' ? 'bg-red-50 text-red-600' : project.riskLevel === 'Medium' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{project.riskLevel} Risk</div>}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
-const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDeleteProject, onUpdateProject, onCloneProject }: any) => {
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  return (
-    <div className="h-full flex flex-col animate-in fade-in duration-500">
-        <NewProjectModal isOpen={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} onSubmit={onCreateProject} />
-        <SectionHeader title="Projects" subtitle="Manage your ongoing initiatives" action={<button onClick={() => setIsNewModalOpen(true)} className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"><Plus size={18} /><span>New Project</span></button>} />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-4 custom-scrollbar flex-1 min-h-0">
-            {projects.map((project: Project) => {
-                const projectTasks = tasks.filter((t: Task) => t.projectId === project.id);
-                const taskCount = projectTasks.length;
-                const committed = projectTasks.reduce((sum: number, t: Task) => sum + (t.budget?.agreed || 0), 0);
-                const now = new Date();
-                const today = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-                const overdueCount = projectTasks.filter((t: Task) => t.status !== 'Done' && t.status !== 'Archived' && t.dueDate && t.dueDate < today).length;
-
-                return (
-                    <ProjectCard 
-                        key={project.id} 
-                        project={project} 
-                        stats={{ taskCount, committed, overdueCount }}
-                        onClick={() => onSelectProject(project.id)} 
-                        onClone={() => onCloneProject(project)} 
-                        onDelete={() => onDeleteProject(project.id)} 
-                        onUpdate={(p: Project) => onUpdateProject(p)} 
-                    />
-                );
-            })}
-            <button onClick={() => setIsNewModalOpen(true)} className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 hover:border-primary hover:text-primary hover:bg-slate-50 transition-all group h-full min-h-[250px]">
-                <div className="w-12 h-12 rounded-full bg-slate-50 group-hover:bg-white border border-slate-200 group-hover:border-primary/30 flex items-center justify-center mb-3 transition-all"><Plus size={24} /></div>
-                <span className="font-bold text-sm">Create New Project</span>
-            </button>
-        </div>
-    </div>
-  );
-};
 
 const LeadsView = () => {
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
-
-  const handleSaveLead = (lead: Lead) => {
-    if (leads.some(l => l.id === lead.id)) {
-      setLeads(leads.map(l => l.id === lead.id ? lead : l));
-    } else {
-      setLeads([...leads, lead]);
-    }
-    setIsModalOpen(false);
-    setEditingLead(null);
-  };
-
-  const statuses = ['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'];
-
-  return (
-    <div className="h-full flex flex-col animate-in fade-in duration-500">
-        <LeadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} lead={editingLead} onSave={handleSaveLead} />
-        <SectionHeader 
-            title="Leads Pipeline" 
-            subtitle="Manage and track your opportunities" 
-            action={
-                <button 
-                    onClick={() => { setEditingLead(null); setIsModalOpen(true); }} 
-                    className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"
-                >
-                    <Plus size={18} /><span>Add Lead</span>
-                </button>
-            } 
-        />
-        <div className="flex-1 overflow-x-auto min-h-0 pb-4">
-            <div className="flex space-x-6 h-full min-w-max pb-2 px-1">
-                {statuses.map(status => (
-                    <LeadKanbanColumn 
-                        key={status} 
-                        status={status} 
-                        leads={leads.filter(l => l.status === status)} 
-                        onEdit={(l: Lead) => { setEditingLead(l); setIsModalOpen(true); }} 
-                    />
-                ))}
+    const statuses = ['New', 'Contacted', 'Qualified', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'];
+    return (
+        <div className="h-full flex flex-col animate-in fade-in">
+            <SectionHeader title="Leads & CRM" subtitle="Manage your sales pipeline" action={<button className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700">Add Lead</button>} />
+            <div className="flex-1 overflow-x-auto pb-4">
+                <div className="flex space-x-4 h-full min-w-max">
+                    {statuses.map(status => (
+                        <div key={status} className="w-72 bg-slate-50/50 rounded-2xl border border-slate-200/60 flex flex-col">
+                            <div className="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 flex justify-between items-center bg-slate-100/50 rounded-t-2xl">
+                                {status}
+                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{MOCK_LEADS.filter(l => l.status === status).length}</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                                {MOCK_LEADS.filter(l => l.status === status).map(l => <LeadCard key={l.id} lead={l} />)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
+    );
+};
+
+// --- PLAYBOOK COMPONENTS ---
+
+const PlaybookStepCard = ({ step, onEdit, onDelete }: { step: PlaybookStep, onEdit: () => void, onDelete: () => void }) => {
+  const getIcon = () => {
+    switch (step.channel) {
+      case 'email': return <Mail size={16} className="text-blue-500" />;
+      case 'whatsapp': return <MessageCircle size={16} className="text-green-500" />;
+      case 'voice': return <Phone size={16} className="text-purple-500" />;
+      case 'internal_task': return <CheckSquare size={16} className="text-orange-500" />;
+      default: return <Zap size={16} />;
+    }
+  };
+
+  return (
+    <div className="relative flex gap-4 group">
+      <div className="flex flex-col items-center">
+        <div className="w-px h-6 bg-slate-200"></div>
+        <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center z-10 font-bold text-xs text-slate-500">
+          {step.order}
+        </div>
+        <div className="w-px flex-1 bg-slate-200 min-h-[40px]"></div>
+      </div>
+      <div className="flex-1 pb-6">
+        {step.trigger.value > 0 && (
+           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">
+             <Clock size={12} />
+             <span>Wait {step.trigger.value} {step.trigger.unit}</span>
+           </div>
+        )}
+        <div 
+          onClick={onEdit}
+          className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
+        >
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100">
+                {getIcon()}
+              </div>
+              <span className="font-bold text-sm text-slate-800 capitalize">{step.channel.replace('_', ' ')}</span>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="text-xs text-slate-600 line-clamp-3 bg-slate-50 p-2 rounded-lg border border-slate-100 font-mono">
+            {step.content}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
+
+const PlaybookEditor = ({ playbook, onClose, onSave }: { playbook: Playbook | null, onClose: () => void, onSave: (p: Playbook) => void }) => {
+  const [formData, setFormData] = useState<Playbook>(playbook || {
+    id: `PB-${Date.now()}`,
+    name: '',
+    description: '',
+    leadType: '',
+    isActive: true,
+    steps: [],
+    activeLeadsCount: 0
+  });
+
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+
+  const addStep = () => {
+    const newStep: PlaybookStep = {
+      id: `step-${Date.now()}`,
+      order: formData.steps.length + 1,
+      channel: 'email',
+      trigger: { type: 'delay', value: 1, unit: 'days' },
+      content: ''
+    };
+    setFormData({ ...formData, steps: [...formData.steps, newStep] });
+    setEditingStepId(newStep.id);
+  };
+
+  const updateStep = (id: string, updates: Partial<PlaybookStep>) => {
+    setFormData({
+      ...formData,
+      steps: formData.steps.map(s => s.id === id ? { ...s, ...updates } : s)
+    });
+  };
+
+  const deleteStep = (id: string) => {
+    setFormData({
+      ...formData,
+      steps: formData.steps.filter(s => s.id !== id).map((s, i) => ({ ...s, order: i + 1 }))
+    });
+  };
+
+  const activeStep = formData.steps.find(s => s.id === editingStepId);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex justify-end bg-slate-900/30 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-full max-w-2xl h-full bg-white shadow-2xl overflow-y-auto flex flex-col animate-in slide-in-from-right duration-300 relative">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-20">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{playbook ? 'Edit Playbook' : 'New Playbook'}</h2>
+            <p className="text-xs text-slate-500">Design your automated lead nurturing sequence</p>
+          </div>
+          <div className="flex items-center gap-2">
+             <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+             <button onClick={() => { onSave(formData); onClose(); }} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Save Playbook</button>
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Panel: Steps List */}
+          <div className="flex-1 overflow-y-auto p-6 border-r border-slate-100 bg-white">
+             <div className="space-y-4 mb-8">
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Playbook Name</label>
+                 <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-bold" placeholder="e.g. Wedding Lead Nurture" />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Type / Context</label>
+                 <input type="text" value={formData.leadType} onChange={e => setFormData({...formData, leadType: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="e.g. Wedding, B2B, Real Estate" />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Description</label>
+                 <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-20" placeholder="Describe the goal of this playbook..." />
+               </div>
+             </div>
+
+             <div className="flex items-center justify-between mb-4">
+               <h3 className="text-sm font-bold text-slate-800">Sequence Steps</h3>
+               <button onClick={addStep} className="flex items-center gap-1 text-xs font-bold text-primary hover:bg-blue-50 px-2 py-1 rounded transition-colors"><Plus size={14}/> Add Step</button>
+             </div>
+
+             <div className="pl-2">
+                {formData.steps.map(step => (
+                  <PlaybookStepCard 
+                    key={step.id} 
+                    step={step} 
+                    onEdit={() => setEditingStepId(step.id)} 
+                    onDelete={() => deleteStep(step.id)} 
+                  />
+                ))}
+                {formData.steps.length === 0 && (
+                  <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-xl">
+                    <p className="text-sm text-slate-400 font-medium">No steps yet.</p>
+                    <button onClick={addStep} className="mt-2 text-primary text-xs font-bold hover:underline">Add your first step</button>
+                  </div>
+                )}
+             </div>
+          </div>
+
+          {/* Right Panel: Step Detail Editor */}
+          {activeStep && (
+            <div className="w-80 bg-slate-50 p-6 overflow-y-auto border-l border-slate-100 animate-in slide-in-from-right duration-300 shadow-xl z-10">
+               <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-bold text-slate-800">Edit Step {activeStep.order}</h3>
+                 <button onClick={() => setEditingStepId(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
+               </div>
+
+               <div className="space-y-5">
+                 <div>
+                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Delay Trigger</label>
+                   <div className="flex gap-2">
+                     <input 
+                       type="number" 
+                       min="0"
+                       value={activeStep.trigger.value} 
+                       onChange={e => updateStep(activeStep.id, { trigger: { ...activeStep.trigger, value: parseInt(e.target.value) || 0 } })} 
+                       className="w-20 px-2 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary"
+                     />
+                     <select 
+                       value={activeStep.trigger.unit} 
+                       onChange={e => updateStep(activeStep.id, { trigger: { ...activeStep.trigger, unit: e.target.value as any } })}
+                       className="flex-1 px-2 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white"
+                     >
+                       <option value="hours">Hours</option>
+                       <option value="days">Days</option>
+                     </select>
+                   </div>
+                   <p className="text-[10px] text-slate-400 mt-1">Wait time after previous step.</p>
+                 </div>
+
+                 <div>
+                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Channel</label>
+                   <div className="grid grid-cols-2 gap-2">
+                     {['email', 'whatsapp', 'voice', 'internal_task'].map(c => (
+                       <button 
+                         key={c}
+                         onClick={() => updateStep(activeStep.id, { channel: c as any })}
+                         className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl border text-xs font-bold transition-all ${activeStep.channel === c ? 'bg-white border-primary text-primary shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                       >
+                         {c === 'email' && <Mail size={16}/>}
+                         {c === 'whatsapp' && <MessageCircle size={16}/>}
+                         {c === 'voice' && <Phone size={16}/>}
+                         {c === 'internal_task' && <CheckSquare size={16}/>}
+                         <span className="capitalize">{c.replace('_', ' ')}</span>
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+
+                 <div>
+                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">
+                     {activeStep.channel === 'internal_task' ? 'Task Description' : 'Message Template'}
+                   </label>
+                   <div className="relative">
+                     <textarea 
+                       value={activeStep.content} 
+                       onChange={e => updateStep(activeStep.id, { content: e.target.value })} 
+                       className="w-full px-3 py-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-48 leading-relaxed" 
+                       placeholder={activeStep.channel === 'internal_task' ? "Describe what needs to be done..." : "Hi {{lead_name}}, ..."}
+                     />
+                     {activeStep.channel !== 'internal_task' && (
+                       <div className="absolute bottom-2 right-2 flex gap-1">
+                         <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 cursor-help" title="Use {{lead_name}} variable">{'{{lead_name}}'}</span>
+                         <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 cursor-help" title="Use {{calendar_link}} variable">{'{{calendar_link}}'}</span>
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: Playbook Generator Modal ---
+
+const PlaybookGeneratorModal = ({ onClose, onGenerate }: { onClose: () => void, onGenerate: (p: Playbook) => void }) => {
+  const [formData, setFormData] = useState({
+    leadType: '',
+    requirementSummary: '',
+    serviceType: ''
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const generatePlaybook = async () => {
+     setIsGenerating(true);
+     try {
+       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+       
+       const prompt = `
+         Create a structured Lead Nurturing Playbook for Seyal AI.
+         Context:
+         - Service Type: ${formData.serviceType}
+         - Lead Type: ${formData.leadType}
+         - Summary: ${formData.requirementSummary}
+
+         Generate a JSON response with:
+         1. name (string): A catchy title for the playbook.
+         2. description (string): Short goal of this playbook.
+         3. steps (array): 3-7 steps. Each step has:
+            - channel (enum: 'email', 'whatsapp', 'voice', 'internal_task')
+            - delayHours (number): Hours to wait before this step (from previous step). 0 means immediate.
+            - content (string): The message template or task instruction. Use {{lead_name}}, {{calendar_link}} placeholders.
+         
+         The sequence should build trust, clarify requirements, and drive towards a booking/sale.
+       `;
+
+       const result = await ai.models.generateContent({
+         model: "gemini-3-flash-preview",
+         contents: prompt,
+         config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                description: { type: Type.STRING },
+                steps: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      channel: { type: Type.STRING, enum: ['email', 'whatsapp', 'voice', 'internal_task'] },
+                      delayHours: { type: Type.NUMBER },
+                      content: { type: Type.STRING }
+                    },
+                    required: ['channel', 'delayHours', 'content']
+                  }
+                }
+              },
+              required: ['name', 'description', 'steps']
+            }
+         }
+       });
+
+       const json = JSON.parse(result.text || "{}");
+       
+       const newPlaybook: Playbook = {
+         id: `PB-${Date.now()}`,
+         name: json.name,
+         description: json.description,
+         leadType: formData.leadType || formData.serviceType,
+         isActive: true,
+         activeLeadsCount: 0,
+         steps: json.steps.map((s: any, i: number) => ({
+           id: `s-${Date.now()}-${i}`,
+           order: i + 1,
+           channel: s.channel,
+           trigger: { type: 'delay', value: s.delayHours > 23 ? Math.round(s.delayHours / 24) : s.delayHours, unit: s.delayHours > 23 ? 'days' : 'hours' },
+           content: s.content
+         }))
+       };
+
+       onGenerate(newPlaybook);
+       onClose();
+
+     } catch (e) {
+       console.error("Failed to generate playbook", e);
+       alert("Failed to generate playbook. Please try again.");
+     } finally {
+       setIsGenerating(false);
+     }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg"><Sparkles size={16}/></div>
+            <h3 className="font-bold text-slate-800">Generate with AI</h3>
+          </div>
+          <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-700"/></button>
+        </div>
+        
+        <div className="p-6 space-y-4">
+           {isGenerating ? (
+             <div className="py-12 flex flex-col items-center justify-center text-center">
+               <Loader2 size={40} className="text-primary animate-spin mb-4" />
+               <h4 className="font-bold text-slate-800 text-lg">Designing Playbook...</h4>
+               <p className="text-sm text-slate-500 mt-2 max-w-xs">Analyzing lead context and crafting the perfect nurturing sequence.</p>
+             </div>
+           ) : (
+             <>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Service / Product</label>
+                 <select value={formData.serviceType} onChange={e => setFormData({...formData, serviceType: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white">
+                    <option value="">Select Service...</option>
+                    {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="Wedding Photography">Wedding Photography</option>
+                    <option value="Home Renovation">Home Renovation</option>
+                    <option value="SaaS Product">SaaS Product</option>
+                 </select>
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Type</label>
+                 <input type="text" value={formData.leadType} onChange={e => setFormData({...formData, leadType: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm" placeholder="e.g. High Budget, Urgent, Cold Lead" />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Requirements Summary</label>
+                 <textarea value={formData.requirementSummary} onChange={e => setFormData({...formData, requirementSummary: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm h-24 resize-none" placeholder="Paste lead details or summary here..." />
+               </div>
+             </>
+           )}
+        </div>
+
+        {!isGenerating && (
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-slate-600 font-bold text-sm hover:bg-slate-200 rounded-lg">Cancel</button>
+            <button onClick={generatePlaybook} disabled={!formData.serviceType} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+               <Wand2 size={16} /> Generate Playbook
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PlaybooksView = () => {
+  const [playbooks, setPlaybooks] = useState<Playbook[]>(MOCK_PLAYBOOKS);
+  const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+
+  const handleSavePlaybook = (updated: Playbook) => {
+    if (playbooks.some(p => p.id === updated.id)) {
+      setPlaybooks(playbooks.map(p => p.id === updated.id ? updated : p));
+    } else {
+      setPlaybooks([...playbooks, updated]);
+    }
+    setIsEditorOpen(false);
+  };
+
+  const handleDeletePlaybook = (id: string) => {
+    if (confirm('Delete this playbook template?')) {
+      setPlaybooks(playbooks.filter(p => p.id !== id));
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col animate-in fade-in duration-500">
+      {isGeneratorOpen && (
+        <PlaybookGeneratorModal 
+          onClose={() => setIsGeneratorOpen(false)}
+          onGenerate={(p) => {
+             setEditingPlaybook(p);
+             setIsEditorOpen(true);
+          }}
+        />
+      )}
+
+      {isEditorOpen && (
+        <PlaybookEditor 
+          playbook={editingPlaybook} 
+          onClose={() => setIsEditorOpen(false)} 
+          onSave={handleSavePlaybook} 
+        />
+      )}
+      
+      <SectionHeader 
+        title="Lead Playbooks" 
+        subtitle="Automate your nurturing sequences" 
+        action={
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsGeneratorOpen(true)}
+              className="flex items-center gap-2 bg-indigo-100 text-indigo-700 px-5 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200 transition-all"
+            >
+              <Sparkles size={18} /><span>Create with AI</span>
+            </button>
+            <button 
+              onClick={() => { setEditingPlaybook(null); setIsEditorOpen(true); }} 
+              className="flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all"
+            >
+              <Plus size={18} /><span>New Manual</span>
+            </button>
+          </div>
+        } 
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-4 custom-scrollbar">
+        {playbooks.map(playbook => (
+          <div key={playbook.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all group flex flex-col h-full">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                <FileText size={20} />
+              </div>
+              <div className="relative">
+                <button onClick={() => handleDeletePlaybook(playbook.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </div>
+            
+            <h3 className="text-base font-bold text-slate-900 mb-1">{playbook.name}</h3>
+            <p className="text-xs text-slate-500 line-clamp-2 mb-4 flex-1">{playbook.description || "No description provided."}</p>
+            
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wide border border-slate-100">
+                {playbook.leadType || 'General'}
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide border ${playbook.isActive ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                {playbook.isActive ? <Play size={10} fill="currentColor"/> : <Pause size={10} fill="currentColor"/>}
+                {playbook.isActive ? 'Active' : 'Paused'}
+              </span>
+            </div>
+
+            <div className="pt-4 border-t border-slate-50 flex items-center justify-between text-xs font-medium text-slate-500">
+              <div className="flex items-center gap-1.5">
+                <ListIcon size={14} />
+                <span>{playbook.steps.length} Steps</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Users size={14} />
+                <span>{playbook.activeLeadsCount} Active Leads</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => { setEditingPlaybook(playbook); setIsEditorOpen(true); }}
+              className="mt-4 w-full py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Edit Design
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// --- APP COMPONENT ---
 
 const App = () => {
   const [view, setView] = useState<ViewState>('dashboard');
@@ -1815,6 +2087,7 @@ const App = () => {
           case 'projects': return <ProjectsView projects={projects} tasks={tasks} onSelectProject={setSelectedProjectId} onCreateProject={handleCreateProject} onDeleteProject={handleDeleteProject} onUpdateProject={handleUpdateProject} onCloneProject={handleCloneProject} />;
           case 'tasks': return <div className="h-full flex flex-col"><SectionHeader title="All Tasks" subtitle="Global task list" /><TasksView tasks={tasks} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} projects={projects} /></div>;
           case 'leads': return <LeadsView />;
+          case 'playbooks': return <PlaybooksView />;
           case 'dashboard': return (
               <div className="p-8 flex flex-col items-center justify-center h-full text-slate-400">
                   <LayoutDashboard size={48} className="mb-4 opacity-50"/>
@@ -1852,6 +2125,7 @@ const App = () => {
                 
                 <div className="text-[10px] font-bold text-slate-400 uppercase px-4 mb-2 mt-6">Growth</div>
                 <NavItem id="leads" icon={Users} label="Leads & CRM" />
+                <NavItem id="playbooks" icon={FileText} label="Playbooks" />
                 <NavItem id="automation" icon={Zap} label="Automations" />
                 
                 <div className="text-[10px] font-bold text-slate-400 uppercase px-4 mb-2 mt-6">Workspace</div>
