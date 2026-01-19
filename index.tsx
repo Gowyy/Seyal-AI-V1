@@ -1526,6 +1526,7 @@ const CreateLeadModal = ({ isOpen, onClose, onCreate }: any) => {
 const LeadsView = () => {
     const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
     const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'Kanban' | 'List'>('Kanban');
     const statuses = ['New', 'Contacted', 'Qualified', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'];
     
     return (
@@ -1539,28 +1540,111 @@ const LeadsView = () => {
                 title="Leads & CRM" 
                 subtitle="Manage your sales pipeline" 
                 action={
-                    <button 
-                        onClick={() => setIsNewLeadOpen(true)} 
-                        className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2"
-                    >
-                        <Plus size={18} /> Add Lead
-                    </button>
+                    <div className="flex gap-3">
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                            {['Kanban', 'List'].map((mode: any) => (
+                                <button 
+                                    key={mode} 
+                                    onClick={() => setViewMode(mode)} 
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
+                        <button 
+                            onClick={() => setIsNewLeadOpen(true)} 
+                            className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2"
+                        >
+                            <Plus size={18} /> Add Lead
+                        </button>
+                    </div>
                 } 
             />
-            <div className="flex-1 overflow-x-auto pb-4">
-                <div className="flex space-x-4 h-full min-w-max">
-                    {statuses.map(status => (
-                        <div key={status} className="w-72 bg-slate-50/50 rounded-2xl border border-slate-200/60 flex flex-col">
-                            <div className="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 flex justify-between items-center bg-slate-100/50 rounded-t-2xl">
-                                {status}
-                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{leads.filter(l => l.status === status).length}</span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-                                {leads.filter(l => l.status === status).map(l => <LeadCard key={l.id} lead={l} />)}
-                            </div>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                {viewMode === 'Kanban' && (
+                    <div className="flex-1 overflow-x-auto pb-4 custom-scrollbar">
+                        <div className="flex space-x-4 h-full min-w-max">
+                            {statuses.map(status => (
+                                <div key={status} className="w-72 bg-slate-50/50 rounded-2xl border border-slate-200/60 flex flex-col">
+                                    <div className="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 flex justify-between items-center bg-slate-100/50 rounded-t-2xl">
+                                        {status}
+                                        <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{leads.filter(l => l.status === status).length}</span>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                                        {leads.filter(l => l.status === status).map(l => <LeadCard key={l.id} lead={l} />)}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
+                    </div>
+                )}
+
+                {viewMode === 'List' && (
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex-1 overflow-hidden flex flex-col">
+                        <div className="overflow-y-auto flex-1 custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50 sticky top-0 z-10 text-xs font-bold text-slate-500 uppercase">
+                                    <tr>
+                                        <th className="px-4 py-3 border-b border-slate-100">Name</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Client Type</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Contact</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Service</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Status</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Value</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Probability</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50 text-sm">
+                                    {leads.map(lead => (
+                                        <tr key={lead.id} className="hover:bg-slate-50 transition-colors group">
+                                            <td className="px-4 py-3 font-medium text-slate-800">{lead.name}</td>
+                                            <td className="px-4 py-3 text-slate-500">
+                                                <div className="flex flex-col">
+                                                    <span>{lead.clientType}</span>
+                                                    {lead.clientType === 'Company' && <span className="text-[10px] text-slate-400">{lead.company}</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-500">
+                                                <div className="flex flex-col text-xs">
+                                                    <span>{lead.email}</span>
+                                                    <span>{lead.phone}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-600">{lead.serviceType}</span></td>
+                                            <td className="px-4 py-3">
+                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${
+                                                    lead.status === 'Won' ? 'bg-green-100 text-green-700' : 
+                                                    lead.status === 'Lost' ? 'bg-red-50 text-red-600' : 
+                                                    lead.status === 'New' ? 'bg-blue-50 text-blue-600' : 
+                                                    'bg-slate-100 text-slate-500'}`
+                                                 }>
+                                                    {lead.status}
+                                                 </span>
+                                            </td>
+                                            <td className="px-4 py-3 font-medium text-slate-700">${lead.value.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-slate-500">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-primary" style={{width: `${lead.probability}%`}}></div>
+                                                    </div>
+                                                    <span className="text-xs">{lead.probability}%</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg"><MoreHorizontal size={16}/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {leads.length === 0 && (
+                                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No leads found.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
