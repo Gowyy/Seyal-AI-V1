@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, ArrowRight, TrendingUp, Trash2, Pencil,
   Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
   Save, Building2, MapPin, Clock, Mail, FileText, Play, Pause,
-  GripVertical, Wand2
+  GripVertical, Wand2, Search, MoreVertical, Folder
 } from 'lucide-react';
 
 // --- Polyfill for process.env ---
@@ -110,26 +110,24 @@ interface Project {
   clientPhone?: string;
 }
 
-type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Demo Scheduled' | 'Proposal Made' | 'Negotiation Started' | 'Won' | 'Lost';
-
 interface Lead {
   id: string;
   name: string;
-  clientType: ClientType;
-  company?: string; // Business/Organization Name
+  clientType: string; // 'Individual' | 'Company'
+  company?: string;
   email: string;
   phone: string;
-  stdCode?: string;
-  location?: string;
-  country?: string;
-  source?: string;
-  serviceType?: string;
-  status: LeadStatus;
-  budgetRange?: string;
-  requirement?: string;
-  value: number; // Keep for backward compatibility or calculations
-  lastContact?: string;
-  probability?: number;
+  stdCode: string;
+  location: string;
+  country: string;
+  source: string;
+  serviceType: string;
+  status: string;
+  budgetRange: string;
+  requirement: string;
+  value: number;
+  probability: number;
+  lastContact: string;
 }
 
 interface ActivityLogItem {
@@ -157,6 +155,8 @@ interface NewProjectPayload {
   clientEmail?: string;
   clientStdCode?: string;
   clientPhone?: string;
+  status?: ProjectStatus;
+  riskLevel?: 'Low' | 'Medium' | 'High';
 }
 
 // --- Playbook Types ---
@@ -186,7 +186,7 @@ interface Playbook {
 // --- Mock Data ---
 
 const AVAILABLE_LISTS = ['General', 'Marketing', 'Sales', 'Engineering', 'Design', 'HR', 'Finance'];
-let AVAILABLE_SERVICES = ['Web designing', 'AI Automation', 'App development'];
+const AVAILABLE_SERVICES = ['Web Development', 'Mobile App Development', 'UI/UX Design', 'Digital Marketing', 'SEO Optimization', 'Cloud Consulting', 'AI Automation'];
 
 const MOCK_LEADS: Lead[] = [
   {
@@ -195,14 +195,14 @@ const MOCK_LEADS: Lead[] = [
     clientType: 'Company',
     company: 'TechFlow Inc.',
     email: 'alice@techflow.com',
-    phone: '(555) 123-4567',
+    phone: '+1 (555) 123-4567',
     stdCode: '+1',
-    location: 'New York',
+    location: 'New York, NY',
     country: 'USA',
     status: 'Proposal Made',
     source: 'Website',
-    serviceType: 'Web designing',
-    budgetRange: '₹5–10L',
+    serviceType: 'Web Development',
+    budgetRange: '₹5L - ₹10L',
     requirement: 'Need a complete overhaul of the corporate website with AI chatbot integration.',
     value: 15000,
     lastContact: '2023-11-10',
@@ -214,14 +214,14 @@ const MOCK_LEADS: Lead[] = [
     clientType: 'Individual',
     company: '',
     email: 'bsmith@gmail.com',
-    phone: '9876543210',
+    phone: '+91 9876543210',
     stdCode: '+91',
     location: 'Bangalore',
     country: 'India',
     status: 'New',
     source: 'LinkedIn',
     serviceType: 'AI Automation',
-    budgetRange: '₹1–5L',
+    budgetRange: '₹1L - ₹5L',
     requirement: 'Looking for personal productivity automation tools.',
     value: 5000,
     lastContact: '2023-11-12',
@@ -351,28 +351,6 @@ const MOCK_TASKS: Task[] = [
     budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' },
     list: 'Sales'
   }
-];
-
-const MOCK_ACTIVITY_LOGS: ActivityLogItem[] = [
-    {
-        id: 'act-1',
-        projectId: 'PROJ-001',
-        type: 'creation',
-        user: 'John Doe',
-        userInitials: 'JD',
-        action: 'created the project',
-        details: 'Project "Q4 Marketing Blitz" was initialized with a budget of $50,000.',
-        timestamp: '2023-09-15T09:00:00',
-    },
-    {
-        id: 'act-2',
-        projectId: 'PROJ-001',
-        type: 'ai_action',
-        user: 'AI Agent',
-        action: 'generated initial plan',
-        details: 'Created 12 tasks based on the project description and timeline.',
-        timestamp: '2023-09-15T09:05:00',
-    }
 ];
 
 // --- Helper Functions ---
@@ -1111,278 +1089,70 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   );
 };
 
-const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projectId, projects }: any) => {
-    const displayTasks = useMemo(() => projectId ? tasks.filter((t: Task) => t.projectId === projectId) : tasks, [tasks, projectId]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [viewMode, setViewMode] = useState<'table' | 'board' | 'calendar'>('table');
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [quickFilter, setQuickFilter] = useState('All');
-    const [initialDate, setInitialDate] = useState<string>('');
-    
-    const processedTasks = useMemo(() => {
-        let res = [...displayTasks];
-        const today = new Date().toISOString().split('T')[0];
-        
-        switch (quickFilter) {
-            case 'Pending':
-                res = res.filter(t => t.status !== 'Done');
-                break;
-            case 'Overdue':
-                res = res.filter(t => t.dueDate && t.dueDate < today && t.status !== 'Done');
-                break;
-            case 'Completed':
-                res = res.filter(t => t.status === 'Done');
-                break;
-            case 'Assigned to Me':
-                res = res.filter(t => t.assignee === 'Me');
-                break;
-            case 'High Priority':
-                res = res.filter(t => ['High', 'Urgent'].includes(t.priority));
-                break;
-            default: // 'All'
-                break;
-        }
-        
-        return res;
-    }, [displayTasks, quickFilter]);
-    
-    const boardLists = useMemo(() => Array.from(new Set([...AVAILABLE_LISTS, ...processedTasks.map((t: Task) => t.list || 'General')])), [processedTasks]);
+const CreateProjectModal = ({ isOpen, onClose, onCreate }: any) => {
+  const [formData, setFormData] = useState<NewProjectPayload>({
+    title: '',
+    category: 'General',
+    startDate: '',
+    endDate: '',
+    budget: 0,
+    description: '',
+    clientType: 'Individual',
+    companyName: '',
+    clientName: '',
+    clientEmail: '',
+    clientStdCode: '+1',
+    clientPhone: '',
+    status: 'Planning',
+    riskLevel: 'Low'
+  });
 
-    const handleDragStart = (e: any, id: string) => { e.dataTransfer.setData('taskId', id); };
-    const handleDrop = (e: any, list: string) => { const id = e.dataTransfer.getData('taskId'); const t = tasks.find((t: Task) => t.id === id); if(t) onUpdateTask({...t, list}); };
+  const updateBudget = (value: number) => setFormData(prev => ({ ...prev, budget: value }));
+  if (!isOpen) return null;
 
-    const handleTaskAction = (action: string, task: Task) => {
-        switch (action) {
-            case 'share':
-                alert(`Sharing task: ${task.title}`);
-                break;
-            case 'clone':
-                const clonedTask = { ...task, id: Date.now().toString(), title: `${task.title} (Copy)`, status: 'Draft' };
-                onAddTask(clonedTask);
-                setEditingTask(clonedTask);
-                setIsModalOpen(true);
-                break;
-            case 'archive':
-                onUpdateTask({ ...task, status: 'Archived' });
-                setIsModalOpen(false);
-                break;
-            case 'delete':
-                onDeleteTask(task.id);
-                setIsModalOpen(false);
-                break;
-        }
-    };
-
-    return (
-        <div className="space-y-6 animate-in fade-in duration-500 relative flex flex-col h-full">
-            <TaskDetailPanel 
-                isOpen={isModalOpen} 
-                onClose={() => setIsModalOpen(false)} 
-                onSave={(t: Task) => { if(editingTask) onUpdateTask(t); else onAddTask(t); setIsModalOpen(false); }} 
-                task={editingTask} 
-                onAction={handleTaskAction} 
-                projectId={projectId} 
-                availableTasks={tasks} 
-                projects={projects} 
-                initialDate={initialDate} 
-            />
-            
-            <div className="flex justify-between items-center mb-2">
-                <div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center">
-                    <button onClick={() => setViewMode('board')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'board' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><KanbanIcon size={14} className="mr-2" /> Board</button>
-                    <button onClick={() => setViewMode('table')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><TableIcon size={14} className="mr-2" /> Table</button>
-                    <button onClick={() => setViewMode('calendar')} className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Calendar size={14} className="mr-2" /> Calendar</button>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${isFilterOpen ? 'bg-slate-100 border-slate-300' : 'bg-white hover:bg-slate-50'}`}><Filter size={16} className="mr-2" /> Filter</button>
-                    <button onClick={() => { setEditingTask(null); setInitialDate(new Date().toISOString().split('T')[0]); setIsModalOpen(true); }} className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-primary/20"><Plus size={16} className="mr-2" /> Add Task</button>
-                </div>
-            </div>
-            
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 custom-scrollbar">
-                {['All', 'Pending', 'Overdue', 'Completed', 'Assigned to Me', 'High Priority'].map(f => (
-                    <button 
-                        key={f} 
-                        onClick={() => setQuickFilter(f)} 
-                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${
-                            quickFilter === f 
-                            ? 'bg-slate-800 text-white border-slate-800 shadow-md' 
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                    >
-                        {f}
-                    </button>
-                ))}
-            </div>
-            
-            {viewMode === 'board' ? (
-                <div className="flex-1 overflow-x-auto min-h-0 pb-4"><div className="flex space-x-6 h-full min-w-max pb-2">{boardLists.map(list => <KanbanColumn key={list} list={list} count={processedTasks.filter((t: Task) => (t.list || 'General') === list).length} tasks={processedTasks} onDragOver={(e: any) => e.preventDefault()} onDrop={handleDrop} onDragStart={handleDragStart} onEditTask={(t: Task) => { setEditingTask(t); setIsModalOpen(true); }} onNewTask={() => { setEditingTask(null); setIsModalOpen(true); }} />)}</div></div>
-            ) : viewMode === 'table' ? (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-                    <div className="overflow-auto flex-1 custom-scrollbar">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500 sticky top-0 z-10 shadow-sm">
-                                <tr>
-                                    <th className="px-4 py-3 text-left w-12 border-b border-slate-200">AI</th>
-                                    <th className="px-4 py-3 text-left min-w-[200px] border-b border-slate-200">Task Name</th>
-                                    <th className="px-4 py-3 text-left w-32 border-b border-slate-200">Assignee</th>
-                                    <th className="px-4 py-3 text-left w-32 border-b border-slate-200">Status</th>
-                                    <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Priority</th>
-                                    <th className="px-4 py-3 text-left w-36 border-b border-slate-200">Due Date</th>
-                                    <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Planned</th>
-                                    <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Agreed</th>
-                                    <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Advance</th>
-                                    <th className="px-4 py-3 text-left w-28 border-b border-slate-200">Balance</th>
-                                    <th className="px-4 py-3 text-left w-36 border-b border-slate-200">Payment Due</th>
-                                    <th className="px-4 py-3 text-center w-32 border-b border-slate-200">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {processedTasks.map((t: Task) => (
-                                    <TaskRow 
-                                        key={t.id} 
-                                        task={t} 
-                                        onUpdateTask={onUpdateTask} 
-                                        onAction={handleTaskAction}
-                                        onEdit={() => { setEditingTask(t); setIsModalOpen(true); }}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            ) : (
-                <CalendarBoard 
-                    tasks={processedTasks} 
-                    onEditTask={(t: Task) => { setEditingTask(t); setIsModalOpen(true); }}
-                    onNewTaskWithDate={(date: string) => { 
-                        setEditingTask(null); 
-                        setInitialDate(date);
-                        setIsModalOpen(true); 
-                    }}
-                />
-            )}
-        </div>
-    );
-};
-
-const ActivityFeed = ({ logs }: any) => {
-    if (!logs || logs.length === 0) return <div className="p-8 text-center text-slate-400 text-sm">No activity recorded yet.</div>;
-    
-    return (
-        <div className="space-y-6 pt-2">
-            <div className="relative pl-6 border-l border-slate-200 space-y-8">
-                {logs.map((log: any) => (
-                    <div key={log.id} className="relative group">
-                        <div className={`absolute -left-[29px] w-4 h-4 rounded-full border-2 border-white ring-1 ring-slate-100 transition-colors ${
-                            log.type === 'creation' ? 'bg-blue-500' :
-                            log.type === 'ai_action' ? 'bg-purple-500' :
-                            log.type === 'status_change' ? 'bg-orange-500' : 'bg-slate-300'
-                        }`}></div>
-                        <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-sm text-slate-900">{log.user}</span>
-                                <span className="text-xs text-slate-500">{log.action}</span>
-                                <span className="text-[10px] text-slate-400">• {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </div>
-                            <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 group-hover:bg-slate-100 transition-colors">
-                                {log.details}
-                            </p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, onDeleteTask, projects, onUpdateProject }: any) => {
-    const project = projects.find((p: Project) => p.id === projectId);
-    const [activeTab, setActiveTab] = useState<'plan' | 'budget' | 'activity'>('plan');
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    
-    if (!project) return <div>Project not found</div>;
-
-    return (
-        <div className="h-full flex flex-col animate-in slide-in-from-right duration-300 relative">
-            <EditProjectModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} project={project} onSave={onUpdateProject} />
-            <div className="flex items-start justify-between mb-6 pb-4 border-b border-slate-100">
-                <div className="flex items-start gap-4"><button onClick={onBack} className="mt-1 p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"><ChevronLeft size={20} /></button><div><div className="flex items-center gap-3 mb-1"><h2 className="text-2xl font-bold text-slate-900">{project.title}</h2><span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 uppercase tracking-wide">{project.status}</span></div>
-                    {(project.clientName || project.startDate || project.companyName) && (
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
-                            {project.clientType === 'Company' && project.companyName && (
-                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
-                                    <Building2 size={12} className="text-slate-400" />
-                                    <span className="font-bold text-slate-700">{project.companyName}</span>
-                                </div>
-                            )}
-                            {project.clientName && (
-                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
-                                    <User size={12} className="text-slate-400" />
-                                    <span className="font-bold text-slate-700">{project.clientName}</span>
-                                    {project.clientEmail && <span className="text-slate-400 border-l border-slate-200 pl-1.5 ml-0.5">{project.clientEmail}</span>}
-                                    {(project.clientPhone || project.clientStdCode) && <span className="text-slate-400 border-l border-slate-200 pl-1.5 ml-0.5">{project.clientStdCode} {project.clientPhone}</span>}
-                                </div>
-                            )}
-                            {(project.startDate || project.endDate) && (
-                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
-                                    <Calendar size={12} className="text-slate-400" />
-                                    <span className="font-medium">{formatDateDisplay(project.startDate)}</span>
-                                    {project.endDate && <><ArrowRight size={10} className="text-slate-300" /><span className="font-medium">{formatDateDisplay(project.endDate)}</span></>}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div></div>
-                <div className="flex gap-3"><button onClick={() => setIsEditModalOpen(true)} className="px-4 py-2 border rounded-lg text-sm font-bold hover:bg-slate-50"><Pencil size={16} className="mr-2 inline"/>Edit</button></div>
-            </div>
-            <div className="flex items-center gap-6 border-b border-slate-200 mb-6">{['plan', 'budget', 'activity'].map(tab => <button key={tab} onClick={() => setActiveTab(tab as any)} className={`pb-3 text-sm font-bold capitalize transition-all border-b-2 ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}>{tab === 'plan' ? 'Tasks & Plan' : tab}</button>)}</div>
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                {activeTab === 'plan' && <TasksView projectId={projectId} tasks={tasks} onUpdateTask={onUpdateTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} projects={projects} />}
-                {activeTab === 'budget' && <BudgetView project={project} tasks={tasks.filter((t: Task) => t.projectId === projectId)} />}
-                {activeTab === 'activity' && <ActivityFeed logs={MOCK_ACTIVITY_LOGS.filter(l => l.projectId === projectId)} />}
-            </div>
-        </div>
-    );
-};
-
-const BudgetView = ({ project, tasks }: { project: Project, tasks: Task[] }) => {
-  const stats = useMemo(() => {
-    let committed = 0, spent = 0;
-    const byCategory: Record<string, { committed: number, spent: number, count: number }> = {};
-    tasks.forEach(t => {
-      const taskCommitted = t.budget?.agreed || 0;
-      const taskSpent = (t.budget?.status === 'Paid in Full' && t.budget?.agreed) ? t.budget.agreed : (t.budget?.advance || 0);
-      committed += taskCommitted; spent += taskSpent;
-      const cat = t.list || 'General';
-      if (!byCategory[cat]) byCategory[cat] = { committed: 0, spent: 0, count: 0 };
-      byCategory[cat].committed += taskCommitted; byCategory[cat].spent += taskSpent; byCategory[cat].count += 1;
-    });
-    return { committed, spent, remaining: project.budget.total - committed, categories: Object.entries(byCategory).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.committed - a.committed) };
-  }, [project, tasks]);
-
-  const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
-  let currentAngle = 0;
-  const pieGradient = `conic-gradient(${stats.categories.map((cat, i) => { const pct = (cat.committed / (stats.committed || 1)) * 100; const start = currentAngle; currentAngle += pct; return `${COLORS[i % COLORS.length]} ${start}% ${currentAngle}%`; }).join(', ')}${stats.categories.length ? '' : ', #e2e8f0 0% 100%'})`;
+  const handleCreate = () => {
+    if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
+        alert('End date cannot be earlier than start date.');
+        return;
+    }
+    onCreate(formData);
+    onClose();
+  };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Budget</div><div className="text-xl font-bold text-slate-900">${project.budget.total.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Committed</div><div className="text-xl font-bold text-blue-600">${stats.committed.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Spent</div><div className="text-xl font-bold text-green-600">${stats.spent.toLocaleString()}</div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Remaining</div><div className={`text-xl font-bold ${stats.remaining < 0 ? 'text-red-600' : 'text-slate-700'}`}>${stats.remaining.toLocaleString()}</div></div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center">
-                <h3 className="text-sm font-bold text-slate-700 mb-6 w-full text-left">Budget Distribution</h3>
-                <div className="relative w-48 h-48 rounded-full mb-6" style={{ background: pieGradient }}><div className="absolute inset-4 bg-white rounded-full flex flex-col items-center justify-center"><span className="text-xs text-slate-400 font-bold uppercase">Committed</span><span className="text-xl font-bold text-slate-800">${stats.committed.toLocaleString()}</span></div></div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl"><h2 className="text-lg font-bold text-slate-900">New Project</h2><button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button></div>
+            <div className="p-6 space-y-4">
+                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Project Title</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="Project Name" /></div>
+                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Category</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Total Budget</label><input type="number" value={formData.budget || ''} onChange={e => updateBudget(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="0" /></div></div>
+                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as ProjectStatus})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Draft', 'Planning', 'Ready', 'Execution'].map(s => <option key={s} value={s}>{s}</option>)}</select></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Risk Level</label><select value={formData.riskLevel} onChange={e => setFormData({...formData, riskLevel: e.target.value as any})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">{['Low', 'Medium', 'High'].map(r => <option key={r} value={r}>{r}</option>)}</select></div></div>
+                <div className="grid grid-cols-2 gap-4"><div><CustomDatePicker label="Start Date" value={formData.startDate} onChange={(val: any) => setFormData({...formData, startDate: val})} /></div><div><CustomDatePicker label="End Date" value={formData.endDate} onChange={(val: any) => setFormData({...formData, endDate: val})} minDate={formData.startDate} /></div></div>
+                <div className="pt-2 border-t border-slate-100 mt-2">
+                     <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-bold text-slate-500 uppercase">Client Details</div>
+                        <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                            <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Individual' || !formData.clientType ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
+                            <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-1 gap-3">
+                         {formData.clientType === 'Company' && (
+                             <div><input type="text" value={formData.companyName || ''} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Company Name" /></div>
+                         )}
+                         <div><input type="text" value={formData.clientName || ''} onChange={e => setFormData({...formData, clientName: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder={formData.clientType === 'Company' ? "Contact Person Name" : "Client Name"} /></div>
+                         <div className="grid grid-cols-2 gap-3">
+                             <input type="email" value={formData.clientEmail || ''} onChange={e => setFormData({...formData, clientEmail: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Email Address" />
+                             <div className="flex gap-2">
+                                <input type="text" value={formData.clientStdCode || '+1'} onChange={e => setFormData({...formData, clientStdCode: e.target.value})} className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" placeholder="+1" />
+                                <input type="text" value={formData.clientPhone || ''} onChange={e => setFormData({...formData, clientPhone: e.target.value})} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Mobile Number" />
+                             </div>
+                         </div>
+                     </div>
+                </div>
+                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 mt-2">Description</label><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Describe the project goal..." /></div>
             </div>
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                 <h3 className="text-sm font-bold text-slate-700 mb-6">Category Breakdown</h3>
-                 <div className="space-y-6">{stats.categories.map((cat, i) => { const pct = project.budget.total > 0 ? (cat.committed / project.budget.total) * 100 : 0; return (<div key={cat.name}><div className="flex justify-between text-sm mb-1.5"><span className="font-bold text-slate-700">{cat.name}</span><span className="text-slate-500">{cat.count} Tasks • <span className="text-slate-900 font-bold">${cat.committed.toLocaleString()}</span></span></div><div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}></div></div></div>); })}</div>
-            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button><button onClick={handleCreate} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Create Project</button></div>
         </div>
     </div>
   );
@@ -1391,6 +1161,7 @@ const BudgetView = ({ project, tasks }: { project: Project, tasks: Task[] }) => 
 const EditProjectModal = ({ isOpen, onClose, project, onSave }: any) => {
   const [formData, setFormData] = useState<Project>(project);
   useEffect(() => { setFormData(project); }, [project, isOpen]);
+  
   const updateBudget = (value: number) => setFormData(prev => ({ ...prev, budget: { ...prev.budget, total: value } }));
   if (!isOpen) return null;
   const handleSave = () => {
@@ -1452,70 +1223,340 @@ const ProjectCard = ({ project, onClick, onAction }: any) => (
         <div className="mt-auto pt-3 border-t border-slate-50">
              <div className="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>Progress</span><span>{project.progress}%</span></div>
              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3"><div className="h-full bg-primary rounded-full" style={{ width: `${project.progress}%` }}></div></div>
-             <div className="flex items-center justify-between text-xs"><span className="font-bold text-slate-700">${project.budget.committed.toLocaleString()}</span><span className="text-slate-400">Due {formatDateDisplay(project.endDate)}</span></div>
+             <div className="flex items-center justify-between text-xs"><span className="font-bold text-slate-700">${project.budget.committed?.toLocaleString() || 0}</span><span className="text-slate-400">Due {formatDateDisplay(project.endDate)}</span></div>
         </div>
     </div>
 );
 
 const ProjectsView = ({ projects, tasks, onSelectProject, onCreateProject, onDeleteProject, onUpdateProject }: any) => {
     const [isNewOpen, setIsNewOpen] = useState(false);
-    const [newProj, setNewProj] = useState<NewProjectPayload>({ title: '', category: 'General', startDate: '', endDate: '', budget: 0, description: '' });
-    const handleCreate = () => { onCreateProject(newProj); setIsNewOpen(false); setNewProj({ title: '', category: 'General', startDate: '', endDate: '', budget: 0, description: '' }); };
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredProjects = projects.filter((p: Project) => 
+        p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
     return (
         <div className="h-full flex flex-col animate-in fade-in">
-             <SectionHeader title="Projects" subtitle="Manage your engagements" action={<button onClick={() => setIsNewOpen(true)} className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2"><Plus size={18} /> New Project</button>} />
-             {isNewOpen && (
-                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in">
-                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-                         <h2 className="text-lg font-bold mb-4">New Project</h2>
-                         <div className="space-y-3">
-                             <input className="w-full border p-2 rounded text-sm" placeholder="Title" value={newProj.title} onChange={e => setNewProj({...newProj, title: e.target.value})} />
-                             <select className="w-full border p-2 rounded text-sm" value={newProj.category} onChange={e => setNewProj({...newProj, category: e.target.value})}>{AVAILABLE_LISTS.map(l => <option key={l} value={l}>{l}</option>)}</select>
-                             <div className="grid grid-cols-2 gap-2"><input type="date" className="w-full border p-2 rounded text-sm" value={newProj.startDate} onChange={e => setNewProj({...newProj, startDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded text-sm" value={newProj.endDate} onChange={e => setNewProj({...newProj, endDate: e.target.value})} /></div>
-                             <input type="number" className="w-full border p-2 rounded text-sm" placeholder="Budget" value={newProj.budget || ''} onChange={e => setNewProj({...newProj, budget: parseFloat(e.target.value)})} />
-                             <textarea className="w-full border p-2 rounded text-sm h-24" placeholder="Description" value={newProj.description} onChange={e => setNewProj({...newProj, description: e.target.value})} />
-                         </div>
-                         <div className="mt-4 flex justify-end gap-2"><button onClick={() => setIsNewOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-500">Cancel</button><button onClick={handleCreate} className="px-4 py-2 text-sm font-bold bg-primary text-white rounded-lg">Create</button></div>
-                     </div>
-                 </div>
-             )}
+             <SectionHeader 
+                title="Projects" 
+                subtitle="Manage your engagements" 
+                action={
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Search projects..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-primary w-64 transition-all"
+                            />
+                        </div>
+                        <button onClick={() => setIsNewOpen(true)} className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2">
+                            <Plus size={18} /> New Project
+                        </button>
+                    </div>
+                } 
+             />
+             <CreateProjectModal 
+                isOpen={isNewOpen} 
+                onClose={() => setIsNewOpen(false)} 
+                onCreate={(payload: NewProjectPayload) => { onCreateProject(payload); setIsNewOpen(false); }} 
+             />
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-4 custom-scrollbar">
-                 {projects.map((p: Project) => <ProjectCard key={p.id} project={p} onClick={() => onSelectProject(p.id)} onAction={(a: string) => a === 'edit' && onUpdateProject(p)} />)}
+                 {filteredProjects.map((p: Project) => <ProjectCard key={p.id} project={p} onClick={() => onSelectProject(p.id)} onAction={(a: string) => a === 'edit' && onUpdateProject(p)} />)}
+                 {filteredProjects.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-slate-400">
+                        <p>No projects found matching "{searchQuery}"</p>
+                    </div>
+                 )}
              </div>
         </div>
     );
 };
 
-const LeadCard = ({ lead }: any) => (
-    <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-        <div className="flex justify-between items-start mb-1">
-            <span className="font-bold text-sm text-slate-800">{lead.name}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${lead.probability >= 70 ? 'bg-green-100 text-green-700' : lead.probability >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{lead.probability}%</span>
+const LeadCard: React.FC<{ lead: Lead }> = ({ lead }) => {
+  return (
+    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <h4 className="font-bold text-slate-800 text-sm group-hover:text-primary transition-colors">{lead.name}</h4>
+          <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{lead.clientType === 'Company' ? lead.company : 'Individual'}</p>
         </div>
-        <div className="text-xs text-slate-500 mb-2 font-medium">{lead.company || 'Individual'}</div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-50 pt-2">
-            <span>{lead.source}</span>
-            <span className="font-bold text-slate-600">${lead.value.toLocaleString()}</span>
+        <div className={`w-2 h-2 rounded-full ${lead.status === 'New' ? 'bg-blue-500' : lead.status === 'Won' ? 'bg-green-500' : 'bg-slate-300'}`} />
+      </div>
+      <div className="space-y-1 mb-3">
+        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+           <Mail size={12} className="text-slate-400" />
+           <span className="truncate max-w-[180px]">{lead.email}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+           <MapPin size={12} className="text-slate-400" />
+           <span className="truncate max-w-[180px]">{lead.location}</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">{lead.serviceType}</span>
+        <span className="text-xs font-bold text-slate-900">${lead.value.toLocaleString()}</span>
+      </div>
+    </div>
+  );
+};
+
+const CreateLeadModal = ({ isOpen, onClose, onCreate }: any) => {
+  const [formData, setFormData] = useState<any>({
+    name: '',
+    clientType: 'Individual',
+    company: '',
+    email: '',
+    stdCode: '+1',
+    phone: '',
+    country: '',
+    location: '',
+    source: 'Website',
+    serviceType: AVAILABLE_SERVICES[0],
+    status: 'New',
+    budgetRange: '',
+    requirement: '',
+    value: 0
+  });
+  const [isOtherService, setIsOtherService] = useState(false);
+  const [otherService, setOtherService] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+        setFormData({
+            name: '',
+            clientType: 'Individual',
+            company: '',
+            email: '',
+            stdCode: '+1',
+            phone: '',
+            country: '',
+            location: '',
+            source: 'Website',
+            serviceType: AVAILABLE_SERVICES[0],
+            status: 'New',
+            budgetRange: '',
+            requirement: '',
+            value: 0
+        });
+        setIsOtherService(false);
+        setOtherService('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleCreate = () => {
+      const finalService = isOtherService ? otherService : formData.serviceType;
+      
+      if (!formData.name) return alert('Lead Name is required');
+      
+      const newLead: Lead = {
+          id: `LEAD-${Date.now()}`,
+          name: formData.name,
+          clientType: formData.clientType,
+          company: formData.clientType === 'Company' ? formData.company : undefined,
+          email: formData.email,
+          phone: `${formData.stdCode} ${formData.phone}`,
+          stdCode: formData.stdCode,
+          location: formData.location,
+          country: formData.country,
+          source: formData.source,
+          serviceType: finalService,
+          status: formData.status,
+          budgetRange: formData.budgetRange,
+          requirement: formData.requirement,
+          value: parseFloat(formData.value) || 0,
+          probability: 10,
+          lastContact: new Date().toISOString().split('T')[0]
+      };
+      
+      if (isOtherService && finalService && !AVAILABLE_SERVICES.includes(finalService)) {
+          AVAILABLE_SERVICES.push(finalService);
+      }
+
+      onCreate(newLead);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg"><Users size={16}/></div>
+                    <h2 className="text-lg font-bold text-slate-900">Add New Lead</h2>
+                </div>
+                <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Name <span className="text-red-500">*</span></label>
+                        <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary font-medium" placeholder="Full Name" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Client Type</label>
+                        <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                            <button onClick={() => setFormData({...formData, clientType: 'Individual'})} className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all ${formData.clientType === 'Individual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Individual</button>
+                            <button onClick={() => setFormData({...formData, clientType: 'Company'})} className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all ${formData.clientType === 'Company' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Company</button>
+                        </div>
+                    </div>
+                </div>
+
+                {formData.clientType === 'Company' && (
+                    <div className="animate-in slide-in-from-top-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Business Name</label>
+                        <div className="flex items-center gap-2">
+                            <Building2 size={16} className="text-slate-400" />
+                            <input type="text" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Organization Name" />
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Email Address</label>
+                         <div className="flex items-center gap-2">
+                            <Mail size={16} className="text-slate-400" />
+                            <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="name@example.com" />
+                         </div>
+                    </div>
+                    <div>
+                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Mobile Number</label>
+                         <div className="flex gap-2">
+                            <input type="text" value={formData.stdCode} onChange={e => setFormData({...formData, stdCode: e.target.value})} className="w-16 px-2 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary text-center" placeholder="+1" />
+                            <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="123 456 7890" />
+                         </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Country</label>
+                        <input type="text" value={formData.country} onChange={e => setFormData({...formData, country: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="Country" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">City / Location</label>
+                        <div className="flex items-center gap-2">
+                             <MapPin size={16} className="text-slate-400" />
+                             <input type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="City" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-px bg-slate-100 my-2" />
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Service Type</label>
+                        <select 
+                            value={isOtherService ? 'Other' : formData.serviceType} 
+                            onChange={(e) => {
+                                if (e.target.value === 'Other') {
+                                    setIsOtherService(true);
+                                } else {
+                                    setIsOtherService(false);
+                                    setFormData({...formData, serviceType: e.target.value});
+                                }
+                            }} 
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white"
+                        >
+                            {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                            <option value="Other">Not in list (Add New)</option>
+                        </select>
+                        {isOtherService && (
+                            <input 
+                                autoFocus
+                                type="text" 
+                                value={otherService} 
+                                onChange={e => setOtherService(e.target.value)} 
+                                className="mt-2 w-full px-3 py-2 rounded-lg border border-blue-200 text-sm focus:outline-none focus:border-primary bg-blue-50/50" 
+                                placeholder="Enter new service type..." 
+                            />
+                        )}
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Lead Source</label>
+                        <select value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                            <option value="Website">Website</option>
+                            <option value="LinkedIn">LinkedIn</option>
+                            <option value="Referral">Referral</option>
+                            <option value="Cold Call">Cold Call</option>
+                            <option value="Social Media">Social Media</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Status</label>
+                        <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary bg-white">
+                            {['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'].map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Approx. Budget</label>
+                        <input type="text" value={formData.budgetRange} onChange={e => setFormData({...formData, budgetRange: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary" placeholder="e.g. $5k - $10k" />
+                     </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Requirement Description</label>
+                    <textarea value={formData.requirement} onChange={e => setFormData({...formData, requirement: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-primary resize-none h-24" placeholder="Client requirements, notes, etc." />
+                </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl">
+                <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-colors">Cancel</button>
+                <button onClick={handleCreate} className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Add Lead</button>
+            </div>
         </div>
     </div>
-);
+  );
+};
 
 const LeadsView = () => {
+    const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
+    const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
     const statuses = ['New', 'Contacted', 'Qualified', 'Proposal Made', 'Negotiation Started', 'Won', 'Lost'];
+    
     return (
         <div className="h-full flex flex-col animate-in fade-in">
-            <SectionHeader title="Leads & CRM" subtitle="Manage your sales pipeline" action={<button className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700">Add Lead</button>} />
+            <CreateLeadModal 
+                isOpen={isNewLeadOpen} 
+                onClose={() => setIsNewLeadOpen(false)} 
+                onCreate={(lead: Lead) => { setLeads([...leads, lead]); setIsNewLeadOpen(false); }}
+            />
+            <SectionHeader 
+                title="Leads & CRM" 
+                subtitle="Manage your sales pipeline" 
+                action={
+                    <button 
+                        onClick={() => setIsNewLeadOpen(true)} 
+                        className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2"
+                    >
+                        <Plus size={18} /> Add Lead
+                    </button>
+                } 
+            />
             <div className="flex-1 overflow-x-auto pb-4">
                 <div className="flex space-x-4 h-full min-w-max">
                     {statuses.map(status => (
                         <div key={status} className="w-72 bg-slate-50/50 rounded-2xl border border-slate-200/60 flex flex-col">
                             <div className="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 flex justify-between items-center bg-slate-100/50 rounded-t-2xl">
                                 {status}
-                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{MOCK_LEADS.filter(l => l.status === status).length}</span>
+                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{leads.filter(l => l.status === status).length}</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-                                {MOCK_LEADS.filter(l => l.status === status).map(l => <LeadCard key={l.id} lead={l} />)}
+                                {leads.filter(l => l.status === status).map(l => <LeadCard key={l.id} lead={l} />)}
                             </div>
                         </div>
                     ))}
@@ -1527,7 +1568,7 @@ const LeadsView = () => {
 
 // --- PLAYBOOK COMPONENTS ---
 
-const PlaybookStepCard = ({ step, onEdit, onDelete }: { step: PlaybookStep, onEdit: () => void, onDelete: () => void }) => {
+const PlaybookStepCard: React.FC<{ step: PlaybookStep, onEdit: () => void, onDelete: () => void }> = ({ step, onEdit, onDelete }) => {
   const getIcon = () => {
     switch (step.channel) {
       case 'email': return <Mail size={16} className="text-blue-500" />;
@@ -2010,6 +2051,219 @@ const PlaybooksView = () => {
   );
 };
 
+const TasksView = ({ tasks, onUpdateTask, onAddTask, onDeleteTask, projects, projectId }: any) => {
+    const [viewMode, setViewMode] = useState<'List' | 'Kanban' | 'Calendar'>('List');
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
+    const [initialTaskDate, setInitialTaskDate] = useState<string | undefined>(undefined);
+
+    const filteredTasks = useMemo(() => {
+        return tasks.filter((t: Task) => !projectId || t.projectId === projectId);
+    }, [tasks, projectId]);
+
+    const handleEditTask = (task: Task) => {
+        setSelectedTask(task);
+        setIsDetailOpen(true);
+        setInitialTaskDate(undefined);
+    };
+
+    const handleNewTask = (date?: string) => {
+        setSelectedTask(null);
+        setInitialTaskDate(date);
+        setIsDetailOpen(true);
+    };
+
+    const handleSaveTask = (task: Task) => {
+        if (tasks.find((t: any) => t.id === task.id)) {
+            onUpdateTask(task);
+        } else {
+            onAddTask(task);
+        }
+        setIsDetailOpen(false);
+    };
+
+    return (
+        <div className="flex flex-col h-full animate-in fade-in">
+             <div className="flex justify-between items-center mb-4">
+                 <div className="flex bg-slate-100 p-1 rounded-xl">
+                    {['List', 'Kanban', 'Calendar'].map((mode: any) => (
+                        <button 
+                            key={mode} 
+                            onClick={() => setViewMode(mode)} 
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            {mode}
+                        </button>
+                    ))}
+                 </div>
+                 <button onClick={() => handleNewTask()} className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2">
+                    <Plus size={16} /> Add Task
+                 </button>
+             </div>
+
+             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                {viewMode === 'List' && (
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex-1 overflow-hidden flex flex-col">
+                        <div className="overflow-y-auto flex-1 custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50 sticky top-0 z-10 text-xs font-bold text-slate-500 uppercase">
+                                    <tr>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-10">AI</th>
+                                        <th className="px-4 py-3 border-b border-slate-100">Task</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-32">Assignee</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-32">Status</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-32">Priority</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-40">Due</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-24">Planned</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-24">Agreed</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-24">Paid</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-24">Balance</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-32">Pay Due</th>
+                                        <th className="px-4 py-3 border-b border-slate-100 w-20 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50 text-sm">
+                                    {filteredTasks.map((t: Task) => (
+                                        <TaskRow 
+                                            key={t.id} 
+                                            task={t} 
+                                            onUpdateTask={onUpdateTask} 
+                                            onAction={(action: string, item: any) => {
+                                                if(action === 'delete') onDeleteTask(item.id);
+                                                if(action === 'clone') onAddTask({...item, id: Date.now().toString(), title: item.title + ' (Copy)'});
+                                            }}
+                                            onEdit={() => handleEditTask(t)}
+                                        />
+                                    ))}
+                                    {filteredTasks.length === 0 && (
+                                        <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-400">No tasks found.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {viewMode === 'Kanban' && (
+                    <div className="flex-1 overflow-x-auto pb-4 custom-scrollbar">
+                        <div className="flex space-x-4 h-full min-w-max">
+                            {AVAILABLE_LISTS.map(list => (
+                                <KanbanColumn 
+                                    key={list} 
+                                    list={list} 
+                                    count={filteredTasks.filter((t: Task) => (t.list || 'General') === list).length} 
+                                    tasks={filteredTasks} 
+                                    onDrop={(e: any, listName: string) => {
+                                        e.preventDefault();
+                                        const taskId = e.dataTransfer.getData("text");
+                                        const task = tasks.find((t: Task) => t.id === taskId);
+                                        if (task) onUpdateTask({ ...task, list: listName });
+                                    }}
+                                    onDragStart={(e: any, id: string) => e.dataTransfer.setData("text", id)}
+                                    onEditTask={handleEditTask}
+                                    onNewTask={() => { setSelectedTask(null); setIsDetailOpen(true); }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {viewMode === 'Calendar' && (
+                    <CalendarBoard tasks={filteredTasks} onEditTask={handleEditTask} onNewTaskWithDate={handleNewTask} />
+                )}
+             </div>
+
+             <TaskDetailPanel 
+                isOpen={isDetailOpen} 
+                onClose={() => setIsDetailOpen(false)} 
+                task={selectedTask} 
+                onSave={handleSaveTask}
+                projectId={projectId}
+                initialDate={initialTaskDate}
+                onAction={(action: string, item: any) => {
+                    if(action === 'delete') { onDeleteTask(item.id); setIsDetailOpen(false); }
+                    if(action === 'clone') { onAddTask({...item, id: Date.now().toString(), title: item.title + ' (Copy)'}); setIsDetailOpen(false); }
+                }}
+             />
+        </div>
+    );
+};
+
+const ProjectDetailView = ({ projectId, onBack, tasks, onUpdateTask, onAddTask, onDeleteTask, projects, onUpdateProject }: any) => {
+    const project = projects.find((p: Project) => p.id === projectId);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    
+    if (!project) return <div>Project not found</div>;
+
+    const projectTasks = tasks.filter((t: Task) => t.projectId === projectId);
+    const completedTasks = projectTasks.filter((t: Task) => t.status === 'Done');
+    const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
+
+    return (
+        <div className="h-full flex flex-col animate-in fade-in">
+            <EditProjectModal 
+                isOpen={isEditOpen} 
+                onClose={() => setIsEditOpen(false)} 
+                project={project}
+                onSave={(updated: Project) => { onUpdateProject(updated); setIsEditOpen(false); }}
+            />
+            <div className="mb-6 flex-none">
+                <button onClick={onBack} className="flex items-center text-slate-500 hover:text-slate-800 text-sm font-bold mb-4 transition-colors">
+                    <ChevronLeft size={16} /> Back to Projects
+                </button>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                             <h1 className="text-2xl font-black text-slate-900">{project.title}</h1>
+                             <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wide ${project.status === 'Execution' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{project.status}</span>
+                        </div>
+                        <p className="text-slate-500 text-sm max-w-2xl">{project.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => setIsEditOpen(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors" title="Edit Settings"><Settings size={20}/></button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4 mt-6">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="text-xs font-bold text-slate-400 uppercase mb-1">Budget</div>
+                        <div className="text-xl font-bold text-slate-800">${project.budget.total.toLocaleString()}</div>
+                        <div className="text-xs text-slate-500 mt-1">${project.budget.spent.toLocaleString()} spent</div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                         <div className="text-xs font-bold text-slate-400 uppercase mb-1">Progress</div>
+                         <div className="text-xl font-bold text-slate-800">{progress}%</div>
+                         <div className="w-full h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                             <div className="h-full bg-green-500" style={{width: `${progress}%`}}></div>
+                         </div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="text-xs font-bold text-slate-400 uppercase mb-1">Client</div>
+                        <div className="text-sm font-bold text-slate-800">{project.clientName || 'Internal'}</div>
+                        <div className="text-xs text-slate-500 mt-1">{project.clientPhone || project.clientEmail}</div>
+                    </div>
+                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="text-xs font-bold text-slate-400 uppercase mb-1">Timeline</div>
+                        <div className="text-sm font-bold text-slate-800">{formatDateDisplay(project.endDate)}</div>
+                        <div className="text-xs text-slate-500 mt-1">Target Completion</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex-1 min-h-0 border-t border-slate-100 pt-4 flex flex-col">
+                 <TasksView 
+                    tasks={tasks}
+                    projectId={projectId}
+                    onUpdateTask={onUpdateTask}
+                    onAddTask={onAddTask}
+                    onDeleteTask={onDeleteTask}
+                    projects={projects}
+                 />
+            </div>
+        </div>
+    );
+};
+
 // --- APP COMPONENT ---
 
 const App = () => {
@@ -2024,9 +2278,9 @@ const App = () => {
       const newProject: Project = {
           id: `PROJ-${Date.now()}`,
           ...payload,
-          status: 'Planning',
+          status: payload.status || 'Planning',
           budget: { total: payload.budget, committed: 0, spent: 0 },
-          riskLevel: 'Low',
+          riskLevel: payload.riskLevel || 'Low',
           progress: 0
       };
       setProjects([...projects, newProject]);
