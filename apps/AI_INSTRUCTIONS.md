@@ -1,13 +1,15 @@
+
 # AI Instructions & Guidelines
 
 ## 1. IMMUTABLE COMPONENTS (STRICT)
 The following UI components and modules are considered **FINALIZED**. 
 **DO NOT** modify their internal logic, layout, styling, functionalities, view structure, or data handling unless explicitly and specifically instructed by the user.
 
-- **`ProjectDetailView`**
+- **`ProjectDetailView`** (Restored to ALPHA-1: Tabs, Header, Embedded Tasks)
+- **`ProjectCard`** (Restored to ALPHA-1: 3-column stats grid)
 - **`TasksView`** (including Kanban, Table, Calendar modes)
 - **`TaskDetailPanel`**
-- **`LeadsView`** (Leads & CRM module)
+- **`LeadsView`** (Leads & CRM module with Kanban/List modes)
 - **`PlaybooksView`** (including `PlaybookEditor`, `PlaybookGeneratorModal`, `PlaybookStepCard`)
 
 **Rule:** Treat the code for these components as read-only. New features must be implemented as separate components or wrappers that do not touch the existing codebase of these finalized views.
@@ -27,3 +29,11 @@ The following UI components and modules are considered **FINALIZED**.
 
 ## 5. Explicit Authorization
 - Do not alter any features, data models, or views already created (Projects, Tasks, Leads, Playbooks) without a direct confirmation or request from the user.
+
+## 6. Version Checkpoints
+- **CHECKPOINT ALPHA-1 (Current Saved State)**:
+  - **Leads & CRM**: Full Kanban/List view implementation with `LeadCard` and `CreateLeadModal`.
+  - **Playbooks**: AI-powered Generator, Editor, and List views.
+  - **Tasks**: List, Kanban, and Calendar views with `TaskDetailPanel`.
+  - **Projects**: Detail view with tabbed dashboard (Tasks, Budget, Activity) and rich `ProjectCard` with stats.
+  - **Status**: **FINALIZED & LOCKED**. Restoration target for future rollbacks.
