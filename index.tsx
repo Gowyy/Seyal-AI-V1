@@ -1072,6 +1072,9 @@ const PlaybookGeneratorModal = ({ isOpen, onClose, onGenerate }: any) => {
 const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
     const [data, setData] = useState<Playbook>(playbook);
     const [editingStepId, setEditingStepId] = useState<string | null>(null);
+    const [rewritingStepId, setRewritingStepId] = useState<string | null>(null);
+
+    const VARIABLE_TAGS = ['{{lead_name}}', '{{company}}', '{{email}}', '{{phone}}', '{{location}}', '{{calendar_link}}', '{{portfolio_link}}'];
 
     const updateStep = (id: string, updates: any) => {
         setData(prev => ({
@@ -1097,16 +1100,51 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
     };
 
     const handleAiRewrite = async (stepId: string, currentContent: string) => {
+        if (!currentContent.trim()) return;
+        setRewritingStepId(stepId);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `Rewrite the following message to be more engaging, professional, and conversion-oriented. Keep placeholders like {{lead_name}}. Message: "${currentContent}"`;
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
+            const prompt = `You are an expert copywriter. Rewrite the following message to be more engaging, professional, and clear.
+            
+            Strict Rules:
+            1. PRESERVE all variables like {{lead_name}}, {{company}} exactly as they are.
+            2. Improve grammar and flow.
+            3. Make it sound natural and persuasive.
+            
+            Message: "${currentContent}"`;
+            
+            const response = await ai.models.generateContent({ 
+                model: 'gemini-3-flash-preview', 
+                contents: prompt 
+            });
             const text = response.text?.trim();
             if (text) {
                 updateStep(stepId, { content: text });
             }
         } catch (e) {
             console.error("Rewrite failed", e);
+        } finally {
+            setRewritingStepId(null);
+        }
+    };
+
+    const insertVariable = (stepId: string, variable: string) => {
+        const step = data.steps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const textarea = document.getElementById(`content-${stepId}`) as HTMLTextAreaElement;
+        if (textarea) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = step.content;
+            const newText = text.substring(0, start) + variable + text.substring(end);
+            updateStep(stepId, { content: newText });
+            setTimeout(() => {
+                textarea.focus();
+                textarea.setSelectionRange(start + variable.length, start + variable.length);
+            }, 0);
+        } else {
+             updateStep(stepId, { content: step.content + variable });
         }
     };
 
@@ -1214,18 +1252,35 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
                                         </select>
                                         <button 
                                             onClick={() => handleAiRewrite(step.id, step.content)}
-                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                            disabled={rewritingStepId === step.id || !step.content.trim()}
+                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             title="Rewrite with AI"
                                         >
-                                            <Wand2 size={12} /> Optimize Content
+                                            {rewritingStepId === step.id ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                            {rewritingStepId === step.id ? 'Refining...' : 'AI Refine'}
                                         </button>
                                     </div>
-                                    <textarea 
-                                        value={step.content}
-                                        onChange={(e) => updateStep(step.id, { content: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                                        placeholder={step.channel === 'internal_task' ? "Task description..." : "Message template..."}
-                                    />
+                                    <div className="relative">
+                                        <textarea 
+                                            id={`content-${step.id}`}
+                                            value={step.content}
+                                            onChange={(e) => updateStep(step.id, { content: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
+                                            placeholder={step.channel === 'internal_task' ? "Task description..." : "Message template..."}
+                                        />
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {VARIABLE_TAGS.map(tag => (
+                                                <button 
+                                                    key={tag} 
+                                                    onClick={() => insertVariable(step.id, tag)}
+                                                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-500 hover:border-primary hover:text-primary transition-colors"
+                                                    title={`Insert ${tag}`}
+                                                >
+                                                    {tag}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
