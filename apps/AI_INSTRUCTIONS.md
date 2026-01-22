@@ -1,16 +1,18 @@
-
 # AI Instructions & Guidelines
 
 ## 1. IMMUTABLE COMPONENTS (STRICT)
 The following UI components and modules are considered **FINALIZED**. 
 **DO NOT** modify their internal logic, layout, styling, functionalities, view structure, or data handling unless explicitly and specifically instructed by the user.
 
-- **`ProjectDetailView`** (Restored to ALPHA-1: Tabs, Header, Embedded Tasks)
-- **`ProjectCard`** (Restored to ALPHA-1: 3-column stats grid)
-- **`TasksView`** (including Kanban, Table, Calendar modes)
-- **`TaskDetailPanel`**
-- **`LeadsView`** (Leads & CRM module with Kanban/List modes)
-- **`PlaybooksView`** (including `PlaybookEditor`, `PlaybookGeneratorModal`, `PlaybookStepCard`)
+- **`DashboardView`** (Dashboard with KPIs, Recent Projects, Upcoming Tasks)
+- **`ProjectDetailView`** (Tabs, Header, Embedded Tasks, Budget Stats)
+- **`TasksView`** (Kanban, Table, Calendar modes)
+- **`TaskDetailPanel`** (Task editing, AI features, Subtasks)
+- **`LeadsView`** (Leads & CRM table/list)
+- **`PlaybooksView`** (AI Generator, Editor, Workflow Steps)
+- **`Sidebar`** (Navigation structure)
+- **`NewProjectModal`**
+- **`AiTaskCreatorModal`**
 
 **Rule:** Treat the code for these components as read-only. New features must be implemented as separate components or wrappers that do not touch the existing codebase of these finalized views.
 
@@ -31,9 +33,11 @@ The following UI components and modules are considered **FINALIZED**.
 - Do not alter any features, data models, or views already created (Projects, Tasks, Leads, Playbooks) without a direct confirmation or request from the user.
 
 ## 6. Version Checkpoints
-- **CHECKPOINT ALPHA-1 (Current Saved State)**:
-  - **Leads & CRM**: Full Kanban/List view implementation with `LeadCard` and `CreateLeadModal`.
-  - **Playbooks**: AI-powered Generator, Editor, and List views.
-  - **Tasks**: List, Kanban, and Calendar views with `TaskDetailPanel`.
-  - **Projects**: Detail view with tabbed dashboard (Tasks, Budget, Activity) and rich `ProjectCard` with stats.
+- **CHECKPOINT V1.0 - CORE FEATURE COMPLETE (Current Saved State)**:
+  - **Dashboard**: High-level metrics, recent activity.
+  - **Projects**: Full lifecycle management, budget tracking, client details.
+  - **Tasks**: Advanced task management with AI coordination, subtasks, recurring rules, and multiple views (List/Kanban/Calendar).
+  - **Leads & CRM**: Lead tracking, probability scoring, status management.
+  - **Playbooks**: AI-driven automation workflow generator and editor with variable injection.
+  - **Contacts**: Integrated within projects/leads.
   - **Status**: **FINALIZED & LOCKED**. Restoration target for future rollbacks.

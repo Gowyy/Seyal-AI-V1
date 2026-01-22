@@ -10,7 +10,8 @@ import {
   Sparkles, User, CopyPlus, Archive, AlertCircle, Wallet, Loader2,
   Save, Building2, MapPin, Clock, Mail, FileText, Play, Pause,
   GripVertical, Wand2, Search, MoreVertical, Folder, ArrowUp, ArrowDown,
-  ShieldAlert, Target, DollarSign, Rocket
+  ShieldAlert, Target, DollarSign, Rocket, Upload, Image as ImageIcon, Download,
+  LayoutTemplate
 } from 'lucide-react';
 
 // --- Polyfill for process.env ---
@@ -86,6 +87,12 @@ export interface Task {
     paymentDueDate: string;
   };
   list: string;
+}
+
+interface TaskTemplate {
+  id: string;
+  name: string;
+  structure: Partial<Task>;
 }
 
 interface Project {
@@ -190,6 +197,10 @@ interface Playbook {
 
 const AVAILABLE_LISTS = ['General', 'Marketing', 'Sales', 'Engineering', 'Design', 'HR', 'Finance'];
 const AVAILABLE_SERVICES = ['Web Development', 'Mobile App Development', 'UI/UX Design', 'Digital Marketing', 'SEO Optimization', 'Cloud Consulting', 'AI Automation'];
+const LEAD_STATUSES = ['New', 'Contacted', 'Qualified', 'Proposal Made', 'Negotiation', 'Won', 'Lost'];
+const AVAILABLE_SOURCES = ['LinkedIn', 'Website', 'Referral', 'Cold Call', 'Email Campaign', 'Networking Event', 'Instagram', 'Facebook', 'Twitter/X'];
+const COMMON_COUNTRIES = ['USA', 'India', 'UK', 'Canada', 'Australia', 'Germany', 'France', 'Japan', 'Singapore', 'UAE'];
+const COMMON_CITIES = ['New York', 'London', 'Bangalore', 'Mumbai', 'San Francisco', 'Toronto', 'Sydney', 'Dubai', 'Berlin', 'Paris', 'Tokyo', 'Singapore', 'Delhi', 'Chennai', 'Hyderabad'];
 
 const MOCK_LEADS: Lead[] = [
   {
@@ -354,6 +365,39 @@ const MOCK_TASKS: Task[] = [
     budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' },
     list: 'Sales'
   }
+];
+
+const MOCK_TEMPLATES: TaskTemplate[] = [
+    {
+        id: 'TPL-001',
+        name: 'Weekly Status Report',
+        structure: {
+            title: 'Weekly Status Report',
+            description: 'Compile updates from all departments and prepare slide deck.',
+            priority: 'Medium',
+            subtasks: [
+                { id: 'st1', text: 'Collect metrics', completed: false },
+                { id: 'st2', text: 'Update slides', completed: false },
+                { id: 'st3', text: 'Send for review', completed: false }
+            ],
+            recurrence: { enabled: true, frequency: 'Weekly', interval: 1 }
+        }
+    },
+    {
+        id: 'TPL-002',
+        name: 'Client Onboarding',
+        structure: {
+            title: 'New Client Onboarding',
+            description: 'Set up accounts, schedule kickoff, and send welcome packet.',
+            priority: 'High',
+            subtasks: [
+                { id: 'st1', text: 'Create CRM entry', completed: false },
+                { id: 'st2', text: 'Send welcome email', completed: false },
+                { id: 'st3', text: 'Schedule kickoff call', completed: false }
+            ],
+            recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }
+        }
+    }
 ];
 
 // --- Helper Functions ---
@@ -604,7 +648,39 @@ const CustomSchedule = ({ settings, onUpdate }: any) => {
     );
 };
 
-const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate, projectId, availableTasks = [], projects = [] }: any) => {
+// --- NEW COMPONENT: SaveTemplateModal ---
+const SaveTemplateModal = ({ isOpen, onClose, onSave }: any) => {
+    const [name, setName] = useState('');
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in zoom-in-95">
+                <h3 className="font-bold text-lg text-slate-800 mb-4">Save as Template</h3>
+                <input 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Template Name (e.g., Weekly Report)"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary mb-6"
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-lg transition-colors">Cancel</button>
+                    <button 
+                        onClick={() => { onSave(name); onClose(); setName(''); }} 
+                        disabled={!name.trim()}
+                        className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        Save Template
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate, projectId, availableTasks = [], projects = [], onSaveTemplate }: any) => {
   const [formData, setFormData] = useState<Task>(task || { id: Date.now().toString(), projectId: projectId, title: '', status: 'Todo', priority: 'Medium', assignee: 'Me', assignmentType: 'Self', dueDate: initialDate || new Date().toISOString().split('T')[0], dueTime: '', description: '', tags: [], subtasks: [], dependencies: [], recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }, aiCoordination: false, aiChannels: { whatsapp: true, email: false, voice: false }, aiHistory: [], budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, list: 'General' });
   const [isListOpen, setIsListOpen] = useState(false);
   const [isCreatingList, setIsCreatingList] = useState(false);
@@ -613,6 +689,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   const [tagInputValue, setTagInputValue] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const listDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => { if (task) setFormData(task); else setFormData({ id: Date.now().toString(), projectId: projectId, title: '', status: 'Todo', priority: 'Medium', assignee: 'Me', assignmentType: 'Self', dueDate: initialDate || new Date().toISOString().split('T')[0], dueTime: '', description: '', tags: [], subtasks: [], dependencies: [], recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }, aiCoordination: false, aiChannels: { whatsapp: true, email: false, voice: false }, aiHistory: [], budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, list: 'General' }); }, [task, isOpen, initialDate, projectId]);
@@ -648,6 +725,7 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
         <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-20 border-b border-slate-100">
             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
             <div className="flex gap-2 items-center">
+                <button onClick={() => setIsSaveTemplateOpen(true)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors" title="Save as Template"><LayoutTemplate size={20} /></button>
                 <button onClick={() => onAction?.('share', formData)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><Share2 size={20} /></button>
                 <div className="relative">
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><MoreHorizontal size={20} /></button>
@@ -662,6 +740,15 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
             <div><label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Description</label><textarea value={formData.description} onChange={(e) => updateField('description', e.target.value)} onBlur={autoGenerateTags} className="w-full bg-slate-50 rounded-xl p-4 min-h-[100px] text-sm mb-3" placeholder="Add details..." /><div className="flex flex-wrap items-center gap-2">{(formData.tags || []).map(tag => (<span key={tag} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 group">{tag}<button onClick={() => removeTag(tag)} className="ml-1.5 text-indigo-400 hover:text-indigo-600"><X size={12} /></button></span>))}{isTagInputVisible ? (<div className="flex items-center gap-1"><input autoFocus value={tagInputValue} onChange={(e) => setTagInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} onBlur={() => { if(tagInputValue) addTag(); else setIsTagInputVisible(false); }} className="w-24 px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-primary" placeholder="#tag" /></div>) : (<button onClick={() => setIsTagInputVisible(true)} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold text-slate-500 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-colors"><Plus size={12} className="mr-1" /> Add Tag</button>)}</div></div>
             <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-4"><div className="flex gap-3"><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Assignee</label><select value={formData.assignee} onChange={(e) => updateField('assignee', e.target.value)} className="w-full bg-slate-50 p-2 rounded-lg text-sm"><option value="Me">Me</option><option value="AI Agent">AI Agent</option><option value="Team">Team</option></select></div><div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">Due Date</label><div className="flex gap-2"><CustomDatePicker value={formData.dueDate} onChange={(val: any) => updateField('dueDate', val)} compact className="flex-1" /><CustomTimePicker value={formData.dueTime || ''} onChange={(val: any) => updateField('dueTime', val)} compact className="w-20" /></div></div></div><div><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-slate-500">Priority</label><button onClick={handleAiSuggestPriority} disabled={isAiSuggesting || !formData.title} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition-colors">{isAiSuggesting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} AI Suggest</button></div><div className="flex gap-2">{['Low', 'Medium', 'High', 'Urgent'].map(p => (<button key={p} onClick={() => updateField('priority', p)} className={`flex-1 py-2 rounded-lg border text-xs font-bold ${formData.priority === p ? 'bg-slate-100 border-slate-300 text-slate-800' : 'border-slate-100 text-slate-400'}`}>{p}</button>))}</div></div><div><div className="flex justify-between mb-2 items-center"><div className="flex items-center gap-2"><h3 className="font-bold text-sm">Subtasks</h3><span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 font-bold">{formData.subtasks?.filter(s => s.completed).length || 0}/{formData.subtasks?.length || 0}</span></div><button onClick={handleAiSuggestSubtasks} disabled={isAiSuggesting || !formData.title} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition-colors bg-indigo-50 px-2 py-1 rounded-lg">{isAiSuggesting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Generate</button></div><div className="space-y-0 relative pl-2">{(formData.subtasks?.length || 0) > 1 && (<div className="absolute left-[17px] top-4 bottom-4 w-px bg-slate-200" />)}{formData.subtasks?.map((st, idx) => (<div key={st.id} className="relative flex gap-3 items-start py-2 group"><div onClick={() => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, completed: !s.completed} : s); updateField('subtasks', newSt); }} className={`z-10 mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center cursor-pointer transition-colors shrink-0 ${st.completed ? 'bg-primary border-primary text-white' : 'bg-white border-slate-300 hover:border-primary'}`}>{st.completed && <Check size={10} strokeWidth={4} />}</div><input value={st.text} onChange={(e) => { const newSt = formData.subtasks.map(s => s.id === st.id ? {...s, text: e.target.value} : s); updateField('subtasks', newSt); }} className={`flex-1 bg-transparent text-sm border-none p-0 focus:ring-0 ${st.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`} placeholder="Milestone step..." /><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => moveSubtask(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-100"><ArrowUp size={12}/></button><button onClick={() => moveSubtask(idx, 'down')} disabled={idx === (formData.subtasks?.length || 0) - 1} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-100"><ArrowDown size={12}/></button><button onClick={() => deleteSubtask(st.id)} className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50"><X size={12}/></button></div></div>))}</div><button onClick={() => updateField('subtasks', [...(formData.subtasks || []), {id: Date.now().toString(), text: '', completed: false}])} className="flex items-center gap-1 text-primary text-sm font-bold mt-2 hover:bg-blue-50 px-2 py-1 rounded transition-colors w-full justify-center border border-dashed border-blue-200"><Plus size={14} /> Add Subtask</button></div><div className="flex justify-between items-center"><div className="flex items-center gap-2"><Bot size={18} className="text-purple-500"/><span className="text-sm font-bold">AI Coordination</span></div><Toggle enabled={formData.aiCoordination} onToggle={() => updateField('aiCoordination', !formData.aiCoordination)} size="sm" /></div>{formData.aiCoordination && (<div className="space-y-3 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300"><div className={`p-3 rounded-xl border transition-all duration-200 ${formData.aiChannels.whatsapp ? 'bg-green-50/50 border-green-200' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><div className={`p-1.5 rounded-lg ${formData.aiChannels.whatsapp ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-400'}`}><MessageCircle size={14} /></div><span className={`text-sm font-bold ${formData.aiChannels.whatsapp ? 'text-green-900' : 'text-slate-500'}`}>WhatsApp Updates</span></div><Toggle enabled={formData.aiChannels.whatsapp} onToggle={() => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsapp: !p.aiChannels.whatsapp}}))} size="sm"/></div>{formData.aiChannels.whatsapp && (<div className="pl-9"><MultiSelectDropdown label="Trigger Events" options={WHATSAPP_TRIGGERS} selected={formData.aiChannels.whatsappSettings?.triggers || []} onChange={(triggers: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsappSettings: {...p.aiChannels.whatsappSettings, triggers}}}))} /><CustomSchedule settings={formData.aiChannels.whatsappSettings} onUpdate={(s: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, whatsappSettings: s}}))} /></div>)}</div><div className={`p-3 rounded-xl border transition-all duration-200 ${formData.aiChannels.voice ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><div className={`p-1.5 rounded-lg ${formData.aiChannels.voice ? 'bg-purple-100 text-purple-600' : 'bg-slate-200 text-slate-400'}`}><Phone size={14} /></div><span className={`text-sm font-bold ${formData.aiChannels.voice ? 'text-purple-900' : 'text-slate-500'}`}>Voice Assistant</span></div><Toggle enabled={formData.aiChannels.voice} onToggle={() => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voice: !p.aiChannels.voice}}))} size="sm"/></div>{formData.aiChannels.voice && (<div className="pl-9"><MultiSelectDropdown label="Call Triggers" options={VOICE_TRIGGERS} selected={formData.aiChannels.voiceSettings?.triggers || []} onChange={(triggers: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voiceSettings: {...p.aiChannels.voiceSettings, triggers}}}))} /><CustomSchedule settings={formData.aiChannels.voiceSettings} onUpdate={(s: any) => setFormData(p => ({...p, aiChannels: {...p.aiChannels, voiceSettings: s}}))} /></div>)}</div></div>)}<div className="flex justify-between items-center"><div className="flex items-center gap-2"><Repeat size={18} className="text-blue-500"/><span className="text-sm font-bold">Recurring Task</span></div><Toggle enabled={formData.recurrence?.enabled || false} onToggle={() => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, enabled: !prev.recurrence?.enabled}}))} size="sm" /></div>{formData.recurrence?.enabled && (<div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-3 animate-in slide-in-from-top-2"><div className="flex gap-3"><div className="flex-1"><label className="block text-[10px] font-bold text-blue-900/60 uppercase mb-1">Frequency</label><select value={formData.recurrence.frequency} onChange={(e) => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, frequency: e.target.value}}))} className="w-full bg-white border border-blue-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-blue-400 text-blue-900 font-medium"><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option></select></div><div className="w-20"><label className="block text-[10px] font-bold text-blue-900/60 uppercase mb-1">Every</label><div className="flex items-center bg-white border border-blue-200 rounded-lg px-2 py-1.5"><input type="number" value={formData.recurrence.interval} onChange={(e) => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, interval: parseInt(e.target.value) || 1}}))} className="w-full text-xs focus:outline-none text-blue-900 font-medium" min="1" /><span className="text-[10px] text-blue-400 ml-1">{formData.recurrence.frequency === 'Daily' ? 'days' : formData.recurrence.frequency === 'Weekly' ? 'wks' : formData.recurrence.frequency === 'Monthly' ? 'mos' : 'yrs'}</span></div></div></div><div><label className="block text-[10px] font-bold text-blue-900/60 uppercase mb-1">End Date (Optional)</label><CustomDatePicker value={formData.recurrence.endDate || ''} onChange={(val: any) => setFormData(prev => ({...prev, recurrence: {...prev.recurrence, endDate: val}}))} compact className="w-full" /></div></div>)}
             {formData.aiHistory && formData.aiHistory.length > 0 && (<div className="pt-4 mt-2 border-t border-slate-100 animate-in fade-in"><div className="flex items-center gap-2 mb-4"><div className="p-1 rounded bg-slate-100 text-slate-500"><HistoryIcon size={14} /></div><span className="text-xs font-bold text-slate-600 uppercase tracking-wide">AI History</span></div><div className="space-y-0 pl-1">{formData.aiHistory.map((item, idx) => (<div key={item.id || idx} className="relative pl-5 pb-4 border-l border-slate-200 last:border-0 last:pb-0 group"><div className={`absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white ring-1 ring-slate-100 transition-colors ${item.status === 'success' ? 'bg-green-500' : item.status === 'failure' ? 'bg-red-500' : 'bg-slate-300'}`}></div><div className="flex justify-between items-start mb-1"><span className={`text-xs font-bold ${item.status === 'failure' ? 'text-red-600' : 'text-slate-700'}`}>{item.action}</span><span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • {new Date(item.timestamp).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span></div><div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">{item.details}</div></div>))}</div></div>)}
+            <SaveTemplateModal 
+                isOpen={isSaveTemplateOpen}
+                onClose={() => setIsSaveTemplateOpen(false)}
+                onSave={(name: string) => onSaveTemplate && onSaveTemplate({
+                    id: Date.now().toString(),
+                    name,
+                    structure: { ...formData, id: undefined, status: 'Todo' }
+                })}
+            />
             </div>
         </main>
       </div>
@@ -669,111 +756,818 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   );
 };
 
-// --- NEW COMPONENT: AiTaskCreatorModal ---
-const AiTaskCreatorModal = ({ isOpen, onClose, onSave, projectId }: any) => {
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
+// --- TasksView Component ---
+const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any) => {
+    const [view, setView] = useState<'list' | 'kanban' | 'calendar'>('list');
+    const [filter, setFilter] = useState('');
+    const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
+    const templateMenuRef = useRef<HTMLDivElement>(null);
 
-    if (!isOpen) return null;
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => { if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) setIsTemplateMenuOpen(false); };
+        if(isTemplateMenuOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isTemplateMenuOpen]);
 
-    const handleGenerate = async () => {
-        if (!input.trim()) return;
-        setLoading(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `You are a helpful project assistant.
-            Extract task details from the following description.
-            Current Date: ${new Date().toISOString().split('T')[0]}
-            
-            Description: "${input}"
-            
-            Return JSON with keys: 
-            - title (string)
-            - description (string, summarize if needed)
-            - priority (Low, Medium, High, Urgent)
-            - dueDate (YYYY-MM-DD string, if mentioned, else empty string)
-            - dueTime (HH:MM string, if mentioned, else empty string)
-            
-            Default priority is Medium. If no due date is mentioned, leave it empty.`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
-            });
-            
-            const text = response.text?.trim();
-            if (text) {
-                const data = JSON.parse(text);
-                const newTask: Task = {
-                    id: `TASK-${Date.now()}`,
-                    projectId: projectId,
-                    title: data.title || 'New Task',
-                    status: 'Todo',
-                    priority: data.priority || 'Medium',
-                    assignee: 'Me',
-                    assignmentType: 'Self',
-                    dueDate: data.dueDate || new Date().toISOString().split('T')[0],
-                    dueTime: data.dueTime || '',
-                    description: data.description || input,
-                    tags: [],
-                    subtasks: [],
-                    dependencies: [],
-                    recurrence: { enabled: false, frequency: 'Weekly', interval: 1 },
-                    aiCoordination: false,
-                    aiChannels: { whatsapp: false, email: false, voice: false },
-                    aiHistory: [],
-                    budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' },
-                    list: 'General'
-                };
-                onSave(newTask);
-                onClose();
-                setInput('');
-            }
-        } catch (e) {
-            console.error("AI Task Generation Failed", e);
-            alert("Failed to generate task. Please try again.");
-        } finally {
-            setLoading(false);
+    const filteredTasks = useMemo(() => {
+        return tasks.filter((t: any) => {
+            if (projectId && t.projectId !== projectId) return false;
+            if (filter && !t.title.toLowerCase().includes(filter.toLowerCase())) return false;
+            return true;
+        });
+    }, [tasks, projectId, filter]);
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="flex justify-between items-center mb-4 px-1">
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                    <button onClick={() => setView('list')} className={`p-2 rounded-md transition-all ${view === 'list' ? 'bg-white shadow text-primary' : 'text-slate-500 hover:text-slate-700'}`}><ListIcon size={16}/></button>
+                    <button onClick={() => setView('kanban')} className={`p-2 rounded-md transition-all ${view === 'kanban' ? 'bg-white shadow text-primary' : 'text-slate-500 hover:text-slate-700'}`}><KanbanIcon size={16}/></button>
+                    <button onClick={() => setView('calendar')} className={`p-2 rounded-md transition-all ${view === 'calendar' ? 'bg-white shadow text-primary' : 'text-slate-500 hover:text-slate-700'}`}><Calendar size={16}/></button>
+                </div>
+                <div className="flex gap-2">
+                     <div className="relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                        <input 
+                            placeholder="Search tasks..." 
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-primary"
+                        />
+                     </div>
+                     <div className="relative" ref={templateMenuRef}>
+                        <button 
+                            onClick={() => setIsTemplateMenuOpen(!isTemplateMenuOpen)}
+                            className="bg-white border border-slate-200 text-slate-600 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-50 transition-colors h-full"
+                            title="Create from Template"
+                        >
+                            <LayoutTemplate size={16} />
+                        </button>
+                        {isTemplateMenuOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                                <div className="text-[10px] font-bold text-slate-400 px-3 py-2 uppercase bg-slate-50 border-b border-slate-100">Templates</div>
+                                <div className="max-h-60 overflow-y-auto">
+                                    {templates && templates.map((tpl: any) => (
+                                        <button 
+                                            key={tpl.id}
+                                            onClick={() => {
+                                                onAction('create', { ...tpl.structure, projectId, id: `TASK-${Date.now()}` });
+                                                setIsTemplateMenuOpen(false);
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors truncate block"
+                                        >
+                                            {tpl.name}
+                                        </button>
+                                    ))}
+                                    {(!templates || templates.length === 0) && (
+                                        <div className="px-4 py-3 text-xs text-slate-400 italic text-center">No templates saved yet.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                     </div>
+                     <button onClick={() => onAction('create', { projectId })} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-blue-700 transition-colors">
+                        <Plus size={16} /> New Task
+                     </button>
+                </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+                {view === 'list' && (
+                    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50 sticky top-0 z-10 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-10">AI</th>
+                                    <th className="px-4 py-3 border-b border-slate-100">Task</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-32">Assignee</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-32">Status</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-32">Priority</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-40">Due Date</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-24">Planned</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-24">Agreed</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-24 text-green-600">Advance</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-24">Balance</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-32">Payment Due</th>
+                                    <th className="px-4 py-3 border-b border-slate-100 w-24 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-sm divide-y divide-slate-50">
+                                {filteredTasks.map((task: any) => (
+                                    <TaskRow 
+                                        key={task.id} 
+                                        task={task} 
+                                        onUpdateTask={onUpdateTask} 
+                                        onAction={onAction}
+                                        onEdit={() => onAction('edit', task)}
+                                    />
+                                ))}
+                                {filteredTasks.length === 0 && (
+                                    <tr>
+                                        <td colSpan={12} className="px-4 py-8 text-center text-slate-400">
+                                            No tasks found for this project.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {view === 'kanban' && (
+                    <div className="h-full overflow-x-auto overflow-y-hidden flex gap-4 pb-2">
+                        {AVAILABLE_LISTS.map(list => (
+                            <KanbanColumn 
+                                key={list}
+                                list={list}
+                                count={filteredTasks.filter((t: any) => (t.list || 'General') === list).length}
+                                tasks={filteredTasks}
+                                onDrop={(e: any, listName: string) => {
+                                    const taskId = e.dataTransfer.getData('taskId');
+                                    const task = tasks.find((t: any) => t.id === taskId);
+                                    if (task) onUpdateTask({ ...task, list: listName });
+                                }}
+                                onDragStart={(e: any, taskId: string) => e.dataTransfer.setData('taskId', taskId)}
+                                onEditTask={(t: any) => onAction('edit', t)}
+                                onNewTask={() => onAction('create', { list, projectId })}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {view === 'calendar' && (
+                    <CalendarBoard 
+                        tasks={filteredTasks}
+                        onEditTask={(t: any) => onAction('edit', t)}
+                        onNewTaskWithDate={(date: string) => onAction('create', { dueDate: date, projectId })}
+                    />
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- NEW COMPONENT: ProjectFilesView ---
+const ProjectFilesView = ({ projectId, onSave }: any) => {
+    const [files, setFiles] = useState([
+        { id: '1', name: 'Project_Requirements.pdf', type: 'application/pdf', size: '2.4 MB', date: '2023-10-01' },
+        { id: '2', name: 'Moodboard_v1.jpg', type: 'image/jpeg', size: '4.1 MB', date: '2023-10-03', url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3' },
+        { id: '3', name: 'Contract_Signed.pdf', type: 'application/pdf', size: '1.2 MB', date: '2023-09-28' },
+        { id: '4', name: 'Site_Plan.png', type: 'image/png', size: '8.5 MB', date: '2023-10-15', url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&auto=format&fit=crop&q=60&ixlib=rb-4.0.3' }
+    ]);
+    const [isDragging, setIsDragging] = useState(false);
+    const [hasChanges, setHasChanges] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = () => {
+        setIsDragging(false);
+    };
+
+    const processFiles = (fileList: File[]) => {
+        const processedFiles = fileList.map((f: File) => ({
+            id: Date.now().toString() + Math.random(),
+            name: f.name,
+            type: f.type,
+            size: (f.size / 1024 / 1024).toFixed(2) + ' MB',
+            date: new Date().toISOString().split('T')[0],
+            url: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined
+        }));
+        setFiles(prev => [...prev, ...processedFiles]);
+        setHasChanges(true);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            processFiles(Array.from(e.dataTransfer.files));
         }
     };
 
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            processFiles(Array.from(e.target.files));
+        }
+        if (e.target) e.target.value = '';
+    };
+
+    const handleDelete = (id: string) => {
+        setFiles(files.filter(f => f.id !== id));
+        setHasChanges(true);
+    };
+
+    const handleSaveClick = () => {
+        setSaveStatus('saving');
+        setTimeout(() => {
+            if (onSave) onSave(files);
+            setHasChanges(false);
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        }, 600);
+    };
+
     return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 border border-purple-100">
-                <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-2 text-purple-600">
-                        <Sparkles size={20} />
-                        <h3 className="font-bold text-lg">Magic Task Creator</h3>
+        <div className="p-8 h-full overflow-y-auto">
+             <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h3 className="font-bold text-slate-800 text-lg">Files & Documents</h3>
+                    <p className="text-sm text-slate-500">Manage project attachments and assets.</p>
+                </div>
+                <button 
+                    onClick={handleSaveClick}
+                    disabled={!hasChanges || saveStatus === 'saving'}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg transition-all ${
+                        !hasChanges 
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none' 
+                        : saveStatus === 'saved'
+                        ? 'bg-green-500 text-white shadow-green-200'
+                        : 'bg-primary text-white shadow-primary/20 hover:bg-blue-700'
+                    }`}
+                >
+                    {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin"/> : saveStatus === 'saved' ? <Check size={16} /> : <Save size={16} />} 
+                    {saveStatus === 'saved' ? 'Saved!' : 'Save Changes'}
+                </button>
+            </div>
+
+            <div 
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center mb-8 transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-slate-300 bg-white'}`}
+            >
+                <div className={`p-4 rounded-full mb-4 ${isDragging ? 'bg-blue-100 text-primary' : 'bg-slate-100 text-slate-400'}`}>
+                    <Upload size={32} />
+                </div>
+                <h3 className="font-bold text-slate-700 mb-1">Upload Files</h3>
+                <p className="text-sm text-slate-500 mb-4">Drag and drop files here, or click to browse</p>
+                
+                <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    multiple 
+                    onChange={handleFileSelect} 
+                />
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-white border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+                >
+                    Browse Files
+                </button>
+            </div>
+
+            <h3 className="font-bold text-slate-800 mb-4">Attached Files ({files.length})</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {files.map(file => (
+                    <div key={file.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm group hover:shadow-md transition-all">
+                        <div className="aspect-square bg-slate-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center relative">
+                            {file.type.startsWith('image/') && file.url ? (
+                                <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                            ) : (
+                                <FileText size={40} className="text-slate-400" />
+                            )}
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button className="p-2 bg-white rounded-lg text-slate-700 hover:text-primary"><Download size={16} /></button>
+                                <button onClick={() => handleDelete(file.id)} className="p-2 bg-white rounded-lg text-slate-700 hover:text-red-600"><Trash2 size={16} /></button>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <div className={`p-1.5 rounded-lg shrink-0 ${file.type.startsWith('image/') ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                {file.type.startsWith('image/') ? <ImageIcon size={14} /> : <FileText size={14} />}
+                            </div>
+                            <div className="min-w-0">
+                                <h4 className="text-xs font-bold text-slate-700 truncate" title={file.name}>{file.name}</h4>
+                                <p className="text-[10px] text-slate-400">{file.size} • {file.date}</p>
+                            </div>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const ProjectDetailView = ({ project, tasks, onBack, onUpdateTask, onUpdateProject, onAction }: any) => {
+    const [activeTab, setActiveTab] = useState('tasks');
+    const [editedProject, setEditedProject] = useState(project);
+    const [hasChanges, setHasChanges] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
+
+    useEffect(() => {
+        setEditedProject(project);
+        setHasChanges(false);
+    }, [project]);
+
+    const handleUpdateField = (field: string, value: any) => {
+        setEditedProject((prev: any) => ({...prev, [field]: value}));
+        setHasChanges(true);
+    };
+
+    const handleSave = () => {
+        if (onUpdateProject) onUpdateProject(editedProject);
+        setHasChanges(false);
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+    };
+
+    return (
+        <div className="h-full flex flex-col bg-slate-50">
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-8 py-6 sticky top-0 z-20">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-4 transition-colors">
+                    <ChevronLeft size={16}/> Back to Projects
+                </button>
+                <div className="flex justify-between items-start">
+                    <div className="flex-1 mr-8">
+                        <div className="flex items-center gap-3 mb-2">
+                             <input 
+                                className="text-3xl font-bold text-slate-900 bg-transparent border-none focus:ring-0 p-0 w-full focus:outline-none placeholder:text-slate-300" 
+                                value={editedProject.title} 
+                                onChange={(e) => handleUpdateField('title', e.target.value)} 
+                                placeholder="Project Title"
+                             />
+                             <select 
+                                value={editedProject.status} 
+                                onChange={(e) => handleUpdateField('status', e.target.value)}
+                                className={`px-3 py-1 rounded-full text-xs font-bold border-none focus:ring-0 cursor-pointer ${editedProject.status === 'Execution' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}
+                             >
+                                <option value="Draft">Draft</option>
+                                <option value="Planning">Planning</option>
+                                <option value="Execution">Execution</option>
+                                <option value="Completed">Completed</option>
+                                <option value="On Hold">On Hold</option>
+                             </select>
+                        </div>
+                        <textarea 
+                            className="text-slate-500 max-w-2xl w-full bg-transparent border-none focus:ring-0 p-0 resize-none text-sm focus:outline-none"
+                            value={editedProject.description || ''} 
+                            onChange={(e) => handleUpdateField('description', e.target.value)}
+                            placeholder="Add a description..."
+                            rows={2}
+                        />
+                    </div>
+                    <div className="flex gap-3">
+                         <button 
+                            onClick={handleSave} 
+                            disabled={!hasChanges}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all flex items-center gap-2 ${
+                                !hasChanges
+                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                                : saveStatus === 'saved'
+                                ? 'bg-green-500 text-white shadow-green-200'
+                                : 'bg-primary text-white shadow-primary/20 hover:bg-blue-700'
+                            }`}
+                         >
+                            {saveStatus === 'saved' ? <Check size={16} /> : <Save size={16} />} 
+                            {saveStatus === 'saved' ? 'Saved!' : 'Save Project'}
+                         </button>
+                    </div>
                 </div>
                 
-                <p className="text-slate-500 text-sm mb-4">Describe your task naturally, and AI will structure it for you.</p>
-                
-                <textarea 
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="e.g., Review the Q3 marketing budget by Friday urgent..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 min-h-[120px] resize-none mb-4 font-medium text-slate-700"
-                    autoFocus
-                />
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-6 mt-8">
+                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-xs font-bold text-slate-400 uppercase">Budget Used</span>
+                        <div className="mt-1 flex items-baseline gap-2">
+                            <span className="text-xl font-bold text-slate-800">${project.budget?.spent.toLocaleString()}</span>
+                            <span className="text-xs text-slate-500">of ${project.budget?.total.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full h-1 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                             <div className="h-full bg-blue-500" style={{width: `${(project.budget?.spent / project.budget?.total) * 100}%`}}></div>
+                        </div>
+                     </div>
+                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-xs font-bold text-slate-400 uppercase">Timeline</span>
+                        <div className="mt-1 font-bold text-slate-800 text-sm">{new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}</div>
+                     </div>
+                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-xs font-bold text-slate-400 uppercase">Client</span>
+                        <div className="mt-1 flex items-center gap-2">
+                             <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                {project.clientName?.charAt(0)}
+                             </div>
+                             <span className="font-bold text-slate-800 text-sm truncate">{project.clientName}</span>
+                        </div>
+                     </div>
+                </div>
+            </div>
 
-                <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-lg transition-colors">Cancel</button>
-                    <button 
-                        onClick={handleGenerate} 
-                        disabled={loading || !input.trim()}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-purple-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                        {loading ? 'Generating...' : 'Generate Task'}
-                    </button>
+            {/* Tabs & Content */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+                 <div className="px-8 border-b border-slate-200 bg-white">
+                      <div className="flex gap-8">
+                          <button onClick={() => setActiveTab('tasks')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'tasks' ? 'text-primary border-primary' : 'text-slate-500 border-transparent hover:text-slate-800'}`}>Tasks</button>
+                          <button onClick={() => setActiveTab('files')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'files' ? 'text-primary border-primary' : 'text-slate-500 border-transparent hover:text-slate-800'}`}>Files</button>
+                          <button onClick={() => setActiveTab('invoices')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'invoices' ? 'text-primary border-primary' : 'text-slate-500 border-transparent hover:text-slate-800'}`}>Invoices</button>
+                      </div>
+                 </div>
+                 <div className="flex-1 overflow-hidden bg-slate-50">
+                      {activeTab === 'tasks' && <TasksView tasks={tasks} onUpdateTask={onUpdateTask} onAction={onAction} projectId={project.id} />}
+                      {activeTab === 'files' && <ProjectFilesView projectId={project.id} onSave={(files: any) => console.log('Files saved', files)} />}
+                      {activeTab === 'invoices' && <div className="p-8 text-center text-slate-400">Invoices module coming soon.</div>}
+                 </div>
+            </div>
+        </div>
+    );
+};
+
+const DashboardView = ({ projects, tasks, leads }: any) => {
+    // Basic metrics
+    const activeProjects = projects.filter((p: any) => p.status === 'Execution').length;
+    const completedTasks = tasks.filter((t: any) => t.status === 'Done').length;
+    const totalTasks = tasks.length;
+    const taskCompletion = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const pendingLeads = leads.filter((l: any) => l.status === 'New' || l.status === 'Contacted').length;
+
+    return (
+        <div className="h-full overflow-y-auto p-8">
+            <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Active Projects</span>
+                    <div className="flex items-end justify-between">
+                        <span className="text-3xl font-bold text-slate-800">{activeProjects}</span>
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Briefcase size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Task Completion</span>
+                    <div className="flex items-end justify-between">
+                        <span className="text-3xl font-bold text-slate-800">{taskCompletion}%</span>
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg"><CheckSquare size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Pending Leads</span>
+                    <div className="flex items-end justify-between">
+                        <span className="text-3xl font-bold text-slate-800">{pendingLeads}</span>
+                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Users size={20} /></div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Productivity</span>
+                    <div className="flex items-end justify-between">
+                        <span className="text-3xl font-bold text-slate-800">High</span>
+                        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><TrendingUp size={20} /></div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="font-bold text-slate-800">Recent Projects</h2>
+                        <button className="text-sm text-primary font-bold">View All</button>
+                    </div>
+                    <div className="space-y-4">
+                        {projects.slice(0, 3).map((p: any) => (
+                            <div key={p.id} className="flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 transition-colors border border-slate-100">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                                    {p.title.substring(0,2).toUpperCase()}
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-slate-800 text-sm">{p.title}</h3>
+                                    <p className="text-xs text-slate-500">{p.category}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${p.status === 'Execution' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <h2 className="font-bold text-slate-800">Upcoming Tasks</h2>
+                        <button className="text-sm text-primary font-bold">View All</button>
+                    </div>
+                    <div className="space-y-4">
+                        {tasks.filter((t: any) => t.status !== 'Done').slice(0, 4).map((t: any) => (
+                            <div key={t.id} className="flex items-center gap-3">
+                                <div className={`w-2 h-2 rounded-full ${t.priority === 'Urgent' ? 'bg-red-500' : 'bg-slate-300'}`} />
+                                <span className="text-sm font-medium text-slate-700 flex-1 truncate">{t.title}</span>
+                                <span className="text-xs text-slate-400">{new Date(t.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const LeadsView = ({ leads, onAddLead }: any) => {
+    return (
+        <div className="h-full flex flex-col p-8 bg-slate-50">
+            <SectionHeader 
+                title="Leads & CRM" 
+                subtitle="Manage your client relationships and pipeline."
+                action={<button onClick={onAddLead} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> Add Lead</button>}
+            />
+            
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                         <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Name</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Value</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Probability</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Last Contact</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {leads.map((lead: any) => (
+                                <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="font-bold text-slate-800 text-sm">{lead.name}</div>
+                                        <div className="text-xs text-slate-500">{lead.company || 'Individual'}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                         <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-600 border border-blue-100">{lead.status}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm font-medium text-slate-700">₹{lead.value.toLocaleString()}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-green-500" style={{width: `${lead.probability}%`}}></div>
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-600">{lead.probability}%</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-500">{lead.lastContact}</td>
+                                    <td className="px-6 py-4">
+                                        <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary"><MoreHorizontal size={16}/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     );
 }
+
+// --- NEW COMPONENT: NewLeadModal ---
+const NewLeadModal = ({ isOpen, onClose, onSave }: any) => {
+    const [formData, setFormData] = useState({
+        name: '',
+        clientType: 'Individual', // 'Individual' | 'Company'
+        company: '',
+        email: '',
+        stdCode: '+1',
+        mobileNumber: '',
+        city: '',
+        country: '',
+        source: 'Website',
+        customSource: '',
+        serviceType: 'Web Development',
+        customServiceType: '',
+        status: 'New',
+        budgetRange: '',
+        value: 0,
+        requirement: ''
+    });
+
+    if (!isOpen) return null;
+
+    const handleSubmit = () => {
+        if (!formData.name) {
+            alert('Lead Name is required');
+            return;
+        }
+        // Construct final data
+        const finalData = {
+            ...formData,
+            company: formData.clientType === 'Company' ? formData.company : undefined,
+            phone: `${formData.stdCode} ${formData.mobileNumber}`,
+            location: `${formData.city}, ${formData.country}`,
+            source: formData.source === 'Other' ? formData.customSource : formData.source,
+            serviceType: formData.serviceType === 'Other' ? formData.customServiceType : formData.serviceType
+        };
+        onSave(finalData);
+        // Reset
+        setFormData({
+            name: '', clientType: 'Individual', company: '', email: '', stdCode: '+1', mobileNumber: '',
+            city: '', country: '', source: 'Website', customSource: '', serviceType: 'Web Development', customServiceType: '',
+            status: 'New', budgetRange: '', value: 0, requirement: ''
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col animate-in zoom-in-95">
+                <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                    <h2 className="text-xl font-bold text-slate-800">Add New Lead</h2>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                    {/* Name & Client Type */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                             <label className="block text-xs font-bold text-slate-500 uppercase">Lead Details</label>
+                             <div className="bg-slate-100 p-1 rounded-lg flex text-xs font-bold">
+                                <button 
+                                    onClick={() => setFormData({...formData, clientType: 'Individual'})}
+                                    className={`px-3 py-1 rounded-md transition-all ${formData.clientType === 'Individual' ? 'bg-white shadow text-slate-800' : 'text-slate-400'}`}
+                                >
+                                    Individual
+                                </button>
+                                <button 
+                                     onClick={() => setFormData({...formData, clientType: 'Company'})}
+                                     className={`px-3 py-1 rounded-md transition-all ${formData.clientType === 'Company' ? 'bg-white shadow text-slate-800' : 'text-slate-400'}`}
+                                >
+                                    Company
+                                </button>
+                             </div>
+                        </div>
+                        <div className="space-y-3">
+                            {formData.clientType === 'Company' && (
+                                <input 
+                                    value={formData.company}
+                                    onChange={e => setFormData({...formData, company: e.target.value})}
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                    placeholder="Business Name"
+                                />
+                            )}
+                            <input 
+                                value={formData.name}
+                                onChange={e => setFormData({...formData, name: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                placeholder="Lead Name"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+
+                    {/* Contact Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email</label>
+                            <input 
+                                value={formData.email}
+                                onChange={e => setFormData({...formData, email: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                placeholder="Email Address"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Mobile Number</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    value={formData.stdCode}
+                                    onChange={e => setFormData({...formData, stdCode: e.target.value})}
+                                    className="w-16 border border-slate-200 rounded-xl px-2 py-2.5 text-sm font-medium focus:outline-none focus:border-primary text-center"
+                                    placeholder="+1"
+                                />
+                                <input 
+                                    value={formData.mobileNumber}
+                                    onChange={e => setFormData({...formData, mobileNumber: e.target.value})}
+                                    className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                    placeholder="Mobile"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Location (City & Country) */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City</label>
+                            <input 
+                                list="cities"
+                                value={formData.city}
+                                onChange={e => setFormData({...formData, city: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                placeholder="City"
+                            />
+                            <datalist id="cities">
+                                {COMMON_CITIES.map(c => <option key={c} value={c} />)}
+                            </datalist>
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Country</label>
+                             <input 
+                                list="countries"
+                                value={formData.country}
+                                onChange={e => setFormData({...formData, country: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                placeholder="Country"
+                            />
+                            <datalist id="countries">
+                                {COMMON_COUNTRIES.map(c => <option key={c} value={c} />)}
+                            </datalist>
+                        </div>
+                    </div>
+
+                    {/* Source, Service & Status */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Source</label>
+                             <select 
+                                value={formData.source}
+                                onChange={e => setFormData({...formData, source: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-primary bg-white"
+                            >
+                                {AVAILABLE_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                                <option value="Other">Other (Specify)</option>
+                            </select>
+                            {formData.source === 'Other' && (
+                                <input 
+                                    value={formData.customSource}
+                                    onChange={e => setFormData({...formData, customSource: e.target.value})}
+                                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                    placeholder="Enter Source"
+                                />
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Service Type</label>
+                            <select 
+                                value={formData.serviceType}
+                                onChange={e => setFormData({...formData, serviceType: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-primary bg-white"
+                            >
+                                {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                                <option value="Other">Not in list (Add New)</option>
+                            </select>
+                            {formData.serviceType === 'Other' && (
+                                <input 
+                                    value={formData.customServiceType}
+                                    onChange={e => setFormData({...formData, customServiceType: e.target.value})}
+                                    className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                    placeholder="Enter Service Name"
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Status</label>
+                            <select 
+                                value={formData.status}
+                                onChange={e => setFormData({...formData, status: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-primary bg-white"
+                            >
+                                {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Approximate Budget Range</label>
+                             <input 
+                                value={formData.budgetRange}
+                                onChange={e => setFormData({...formData, budgetRange: e.target.value})}
+                                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                                placeholder="e.g. $5k - $10k"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Value */}
+                    <div>
+                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Estimated Value (Numeric)</label>
+                         <input 
+                            type="number"
+                            value={formData.value}
+                            onChange={e => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary"
+                            placeholder="0"
+                        />
+                    </div>
+
+                    {/* Requirement */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Requirement Description</label>
+                        <textarea 
+                            value={formData.requirement}
+                            onChange={e => setFormData({...formData, requirement: e.target.value})}
+                            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-primary min-h-[100px] resize-none"
+                            placeholder="Describe client requirements..."
+                        />
+                    </div>
+                </div>
+
+                <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50 rounded-b-2xl">
+                    <button onClick={onClose} className="px-5 py-2.5 text-slate-500 font-bold text-sm hover:bg-slate-200 rounded-xl transition-colors">Cancel</button>
+                    <button onClick={handleSubmit} className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Add Lead</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- NEW COMPONENT: NewProjectModal ---
 const NewProjectModal = ({ isOpen, onClose, onCreate }: any) => {
@@ -1399,7 +2193,7 @@ const PlaybooksView = ({ playbooks, onCreatePlaybook, onUpdatePlaybook }: any) =
                 {/* Empty State Card for Quick Create */}
                 <button 
                     onClick={() => setIsGeneratorOpen(true)}
-                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all min-h-[240px]"
+                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 font-bold hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all min-h-[240px]"
                 >
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 group-hover:bg-white group-hover:shadow-md">
                         <Plus size={24} />
@@ -1456,345 +2250,6 @@ const Sidebar = ({ activeView, onNavigate }: any) => {
   );
 };
 
-const TasksView = ({ tasks, onUpdateTask, onAction, projectId }: any) => {
-    const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('list');
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-    const [isDetailOpen, setIsDetailOpen] = useState(false);
-    const [detailInitialDate, setDetailInitialDate] = useState<string | undefined>(undefined);
-    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-
-    const filteredTasks = useMemo(() => {
-        let t = tasks;
-        if (projectId && projectId !== 'GLOBAL') {
-            t = t.filter((task: Task) => task.projectId === projectId);
-        }
-        return t;
-    }, [tasks, projectId]);
-
-    const openNewTask = (date?: string) => {
-        setSelectedTask(null);
-        setDetailInitialDate(date);
-        setIsDetailOpen(true);
-    };
-
-    const openEditTask = (task: Task) => {
-        setSelectedTask(task);
-        setIsDetailOpen(true);
-    };
-
-    return (
-        <div className="h-full flex flex-col bg-slate-50">
-             <div className="px-6 py-4 flex justify-between items-center border-b border-slate-200 bg-white sticky top-0 z-10">
-                <div className="flex items-center gap-2">
-                    <div className="bg-slate-100 p-1 rounded-lg flex">
-                        <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="List View"><ListIcon size={16}/></button>
-                        <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Kanban Board"><KanbanIcon size={16}/></button>
-                        <button onClick={() => setViewMode('calendar')} className={`p-1.5 rounded-md transition-all ${viewMode === 'calendar' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Calendar"><Calendar size={16}/></button>
-                    </div>
-                    <div className="h-6 w-px bg-slate-200 mx-2"></div>
-                    <span className="text-sm font-bold text-slate-500">{filteredTasks.length} Tasks</span>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={() => setIsAiModalOpen(true)} className="flex items-center gap-2 bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-100 transition-colors border border-purple-100">
-                        <Sparkles size={14} /> AI Creator
-                    </button>
-                    <button onClick={() => openNewTask()} className="flex items-center gap-2 bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-colors">
-                        <Plus size={14} /> New Task
-                    </button>
-                </div>
-             </div>
-
-             <div className="flex-1 overflow-hidden p-6">
-                {viewMode === 'list' && (
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-                        <div className="overflow-y-auto flex-1 custom-scrollbar">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-10">AI</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Task Name</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-24">Assignee</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-28">Status</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-24">Priority</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-32">Due Date</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-20">Planned</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-20">Agreed</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-20 text-green-600">Paid</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-20 text-red-500">Balance</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-24">Pay Date</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase w-24 text-center">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filteredTasks.map((task: Task) => (
-                                        <TaskRow key={task.id} task={task} onUpdateTask={onUpdateTask} onAction={onAction} onEdit={() => openEditTask(task)} />
-                                    ))}
-                                    {filteredTasks.length === 0 && (
-                                        <tr>
-                                            <td colSpan={12} className="px-4 py-12 text-center text-slate-400 text-sm">No tasks found. Create one to get started.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-                {viewMode === 'kanban' && (
-                     <div className="flex h-full gap-4 overflow-x-auto pb-2">
-                        {AVAILABLE_LISTS.map(listName => (
-                            <KanbanColumn 
-                                key={listName} 
-                                list={listName} 
-                                count={filteredTasks.filter((t: Task) => (t.list || 'General') === listName).length}
-                                tasks={filteredTasks}
-                                onDrop={(e: any, targetList: string) => {
-                                    e.preventDefault();
-                                    const taskId = e.dataTransfer.getData("taskId");
-                                    const task = tasks.find((t: Task) => t.id === taskId);
-                                    if(task) onUpdateTask({...task, list: targetList});
-                                }}
-                                onDragStart={(e: any, id: string) => e.dataTransfer.setData("taskId", id)}
-                                onEditTask={openEditTask}
-                                onNewTask={() => { setSelectedTask(null); setDetailInitialDate(undefined); setIsDetailOpen(true); }}
-                            />
-                        ))}
-                     </div>
-                )}
-                {viewMode === 'calendar' && (
-                    <CalendarBoard tasks={filteredTasks} onEditTask={openEditTask} onNewTaskWithDate={(date: string) => openNewTask(date)} />
-                )}
-             </div>
-
-             <TaskDetailPanel 
-                isOpen={isDetailOpen} 
-                onClose={() => setIsDetailOpen(false)} 
-                task={selectedTask} 
-                onSave={(t: Task) => { onUpdateTask(t); setIsDetailOpen(false); }}
-                onAction={onAction}
-                initialDate={detailInitialDate}
-                projectId={projectId === 'GLOBAL' ? undefined : projectId}
-                availableTasks={tasks}
-                projects={[]}
-             />
-
-            <AiTaskCreatorModal
-                isOpen={isAiModalOpen}
-                onClose={() => setIsAiModalOpen(false)}
-                onSave={(t: Task) => { onUpdateTask(t); setIsAiModalOpen(false); }}
-                projectId={projectId === 'GLOBAL' ? '' : projectId}
-            />
-        </div>
-    );
-};
-
-const ProjectDetailView = ({ project, tasks, onBack, onUpdateTask, onAction }: any) => {
-    return (
-        <div className="h-full flex flex-col bg-slate-50">
-            {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-8 py-6 sticky top-0 z-20">
-                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-4 transition-colors">
-                    <ChevronLeft size={16}/> Back to Projects
-                </button>
-                <div className="flex justify-between items-start">
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                             <h1 className="text-3xl font-bold text-slate-900">{project.title}</h1>
-                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${project.status === 'Execution' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{project.status}</span>
-                        </div>
-                        <p className="text-slate-500 max-w-2xl">{project.description}</p>
-                    </div>
-                    <div className="flex gap-3">
-                         <button className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">Edit Project</button>
-                    </div>
-                </div>
-                
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-6 mt-8">
-                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <span className="text-xs font-bold text-slate-400 uppercase">Budget Used</span>
-                        <div className="mt-1 flex items-baseline gap-2">
-                            <span className="text-xl font-bold text-slate-800">${project.budget?.spent.toLocaleString()}</span>
-                            <span className="text-xs text-slate-500">of ${project.budget?.total.toLocaleString()}</span>
-                        </div>
-                        <div className="w-full h-1 bg-slate-200 rounded-full mt-2 overflow-hidden">
-                             <div className="h-full bg-blue-500" style={{width: `${(project.budget?.spent / project.budget?.total) * 100}%`}}></div>
-                        </div>
-                     </div>
-                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <span className="text-xs font-bold text-slate-400 uppercase">Timeline</span>
-                        <div className="mt-1 font-bold text-slate-800 text-sm">{new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}</div>
-                     </div>
-                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <span className="text-xs font-bold text-slate-400 uppercase">Client</span>
-                        <div className="mt-1 flex items-center gap-2">
-                             <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                                {project.clientName?.charAt(0)}
-                             </div>
-                             <span className="font-bold text-slate-800 text-sm truncate">{project.clientName}</span>
-                        </div>
-                     </div>
-                </div>
-            </div>
-
-            {/* Tabs & Content */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-                 <div className="px-8 border-b border-slate-200 bg-white">
-                      <div className="flex gap-8">
-                          <button className="py-4 text-sm font-bold text-primary border-b-2 border-primary">Tasks</button>
-                          <button className="py-4 text-sm font-bold text-slate-500 hover:text-slate-800">Files</button>
-                          <button className="py-4 text-sm font-bold text-slate-500 hover:text-slate-800">Invoices</button>
-                      </div>
-                 </div>
-                 <div className="flex-1 overflow-hidden">
-                      <TasksView tasks={tasks} onUpdateTask={onUpdateTask} onAction={onAction} projectId={project.id} />
-                 </div>
-            </div>
-        </div>
-    );
-};
-
-const DashboardView = ({ projects, tasks, leads }: any) => {
-    // Basic metrics
-    const activeProjects = projects.filter((p: any) => p.status === 'Execution').length;
-    const completedTasks = tasks.filter((t: any) => t.status === 'Done').length;
-    const totalTasks = tasks.length;
-    const taskCompletion = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    const pendingLeads = leads.filter((l: any) => l.status === 'New' || l.status === 'Contacted').length;
-
-    return (
-        <div className="h-full overflow-y-auto p-8">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Active Projects</span>
-                    <div className="flex items-end justify-between">
-                        <span className="text-3xl font-bold text-slate-800">{activeProjects}</span>
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Briefcase size={20} /></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Task Completion</span>
-                    <div className="flex items-end justify-between">
-                        <span className="text-3xl font-bold text-slate-800">{taskCompletion}%</span>
-                        <div className="p-2 bg-green-50 text-green-600 rounded-lg"><CheckSquare size={20} /></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Pending Leads</span>
-                    <div className="flex items-end justify-between">
-                        <span className="text-3xl font-bold text-slate-800">{pendingLeads}</span>
-                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><Users size={20} /></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                    <span className="text-xs font-bold text-slate-500 uppercase mb-2">Productivity</span>
-                    <div className="flex items-end justify-between">
-                        <span className="text-3xl font-bold text-slate-800">High</span>
-                        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><TrendingUp size={20} /></div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-slate-800">Recent Projects</h2>
-                        <button className="text-sm text-primary font-bold">View All</button>
-                    </div>
-                    <div className="space-y-4">
-                        {projects.slice(0, 3).map((p: any) => (
-                            <div key={p.id} className="flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 transition-colors border border-slate-100">
-                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                                    {p.title.substring(0,2).toUpperCase()}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-slate-800 text-sm">{p.title}</h3>
-                                    <p className="text-xs text-slate-500">{p.category}</p>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${p.status === 'Execution' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-slate-800">Upcoming Tasks</h2>
-                        <button className="text-sm text-primary font-bold">View All</button>
-                    </div>
-                    <div className="space-y-4">
-                        {tasks.filter((t: any) => t.status !== 'Done').slice(0, 4).map((t: any) => (
-                            <div key={t.id} className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${t.priority === 'Urgent' ? 'bg-red-500' : 'bg-slate-300'}`} />
-                                <span className="text-sm font-medium text-slate-700 flex-1 truncate">{t.title}</span>
-                                <span className="text-xs text-slate-400">{new Date(t.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const LeadsView = ({ leads }: any) => {
-    return (
-        <div className="h-full flex flex-col p-8 bg-slate-50">
-            <SectionHeader 
-                title="Leads & CRM" 
-                subtitle="Manage your client relationships and pipeline."
-                action={<button className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> Add Lead</button>}
-            />
-            
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                         <thead className="bg-slate-50 border-b border-slate-200">
-                            <tr>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Name</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Value</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Probability</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Last Contact</th>
-                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {leads.map((lead: any) => (
-                                <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="font-bold text-slate-800 text-sm">{lead.name}</div>
-                                        <div className="text-xs text-slate-500">{lead.company || 'Individual'}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                         <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-600 border border-blue-100">{lead.status}</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-700">₹{lead.value.toLocaleString()}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-green-500" style={{width: `${lead.probability}%`}}></div>
-                                            </div>
-                                            <span className="text-xs font-bold text-slate-600">{lead.probability}%</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">{lead.lastContact}</td>
-                                    <td className="px-6 py-4">
-                                        <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary"><MoreHorizontal size={16}/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // --- Main App Component ---
 
 const App = () => {
@@ -1803,8 +2258,11 @@ const App = () => {
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
   const [playbooks, setPlaybooks] = useState<Playbook[]>(MOCK_PLAYBOOKS);
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>(MOCK_TEMPLATES);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const handleUpdateTask = (updatedTask: Task) => {
     setTasks(prev => {
@@ -1812,6 +2270,10 @@ const App = () => {
         if (exists) return prev.map(t => t.id === updatedTask.id ? updatedTask : t);
         return [...prev, updatedTask];
     });
+    // If we are currently editing this task, update the reference so the panel stays current
+    if (editingTask && editingTask.id === updatedTask.id) {
+        setEditingTask(updatedTask);
+    }
   };
 
   const handleUpdateProject = (updatedProject: Project) => {
@@ -1845,6 +2307,76 @@ const App = () => {
     setIsNewProjectModalOpen(false);
   };
 
+  const handleCreateLead = (leadData: any) => {
+      const newLead: Lead = {
+          id: `LEAD-${Date.now()}`,
+          name: leadData.name,
+          clientType: leadData.clientType,
+          company: leadData.company,
+          email: leadData.email,
+          phone: leadData.phone,
+          stdCode: leadData.stdCode,
+          location: leadData.location,
+          country: '',
+          source: leadData.source,
+          serviceType: leadData.serviceType,
+          status: leadData.status,
+          budgetRange: leadData.budgetRange,
+          requirement: leadData.requirement,
+          value: leadData.value || 0,
+          probability: 20,
+          lastContact: new Date().toISOString().split('T')[0]
+      };
+      setLeads(prev => [newLead, ...prev]);
+      setIsNewLeadModalOpen(false);
+  };
+
+  const handleSaveTemplate = (template: TaskTemplate) => {
+      setTaskTemplates(prev => [...prev, template]);
+  };
+
+  const handleTaskAction = (action: string, data: any) => {
+      if (action === 'create') {
+          // If data has an ID, it's a template instantiation or a new task with data
+          if (data.id) {
+              setTasks(prev => [...prev, data]);
+              setEditingTask(data); // Open it immediately for editing
+          } else {
+              // Open empty task creator
+              setEditingTask({ 
+                  id: `TASK-${Date.now()}`, 
+                  projectId: data.projectId || 'GLOBAL', 
+                  title: '', 
+                  status: 'Todo', 
+                  priority: 'Medium', 
+                  assignee: 'Me', 
+                  assignmentType: 'Self', 
+                  dueDate: new Date().toISOString().split('T')[0], 
+                  dueTime: '', 
+                  description: '', 
+                  tags: [], 
+                  subtasks: [], 
+                  dependencies: [], 
+                  recurrence: { enabled: false, frequency: 'Weekly', interval: 1 }, 
+                  aiCoordination: false, 
+                  aiChannels: { whatsapp: true, email: false, voice: false }, 
+                  aiHistory: [], 
+                  budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, 
+                  list: 'General',
+                  ...data // Merge any template data
+              });
+          }
+      } else if (action === 'edit') {
+          setEditingTask(data);
+      } else if (action === 'delete') {
+          setTasks(prev => prev.filter(t => t.id !== data.id));
+          if (editingTask?.id === data.id) setEditingTask(null);
+      } else if (action === 'clone') {
+          const newTask = { ...data, id: `TASK-${Date.now()}`, title: `${data.title} (Copy)` };
+          setTasks(prev => [...prev, newTask]);
+      }
+  };
+
   // --- Playbook Handlers ---
   const handleCreatePlaybook = (newPlaybook: Playbook) => {
       setPlaybooks(prev => [...prev, newPlaybook]);
@@ -1865,7 +2397,7 @@ const App = () => {
             onBack={() => setSelectedProjectId(null)} 
             onUpdateTask={handleUpdateTask} 
             onUpdateProject={handleUpdateProject}
-            onAction={() => {}}
+            onAction={handleTaskAction}
          />
        );
     }
@@ -1874,7 +2406,13 @@ const App = () => {
       case 'dashboard':
         return <DashboardView projects={projects} tasks={tasks} leads={leads} />;
       case 'tasks':
-        return <TasksView tasks={tasks} onUpdateTask={handleUpdateTask} onAction={() => {}} projectId="GLOBAL" />;
+        return <TasksView 
+            tasks={tasks} 
+            onUpdateTask={handleUpdateTask} 
+            onAction={handleTaskAction} 
+            projectId="GLOBAL" 
+            templates={taskTemplates}
+        />;
       case 'projects':
          return (
             <div className="p-8 h-full overflow-y-auto">
@@ -1901,7 +2439,7 @@ const App = () => {
             </div>
          );
       case 'leads':
-        return <LeadsView leads={leads} />;
+        return <LeadsView leads={leads} onAddLead={() => setIsNewLeadModalOpen(true)} />;
       case 'playbooks':
         return <PlaybooksView 
             playbooks={playbooks} 
@@ -1922,6 +2460,24 @@ const App = () => {
             isOpen={isNewProjectModalOpen} 
             onClose={() => setIsNewProjectModalOpen(false)}
             onCreate={handleCreateProject}
+        />
+        <NewLeadModal 
+            isOpen={isNewLeadModalOpen}
+            onClose={() => setIsNewLeadModalOpen(false)}
+            onSave={handleCreateLead}
+        />
+        
+        {/* Global Task Detail Panel */}
+        <TaskDetailPanel 
+            isOpen={!!editingTask} 
+            onClose={() => setEditingTask(null)}
+            task={editingTask}
+            onSave={(updated: Task) => {
+                handleUpdateTask(updated);
+                setEditingTask(null);
+            }}
+            onAction={handleTaskAction}
+            onSaveTemplate={handleSaveTemplate}
         />
       </main>
     </div>
