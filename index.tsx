@@ -281,7 +281,7 @@ const MOCK_PROJECTS: Project[] = [
     startDate: '2023-10-01',
     endDate: '2023-12-31',
     budget: { total: 50000, committed: 35000, spent: 12000 },
-    riskLevel: 'Low',
+    riskLevel: 'Medium',
     description: 'End of year marketing campaign across all channels.',
     progress: 45,
     clientType: 'Company',
@@ -299,7 +299,7 @@ const MOCK_PROJECTS: Project[] = [
     startDate: '2024-01-15',
     endDate: '2024-03-01',
     budget: { total: 150000, committed: 20000, spent: 5000 },
-    riskLevel: 'Medium',
+    riskLevel: 'Low',
     description: 'Renovating the new downtown office space.',
     progress: 15,
     clientType: 'Individual',
@@ -756,6 +756,96 @@ const TaskDetailPanel = ({ isOpen, onClose, onSave, task, onAction, initialDate,
   );
 };
 
+// --- ProjectsView ---
+const ProjectsView = ({ projects, onSelectProject, onNewProject, tasks }: any) => {
+    return (
+        <div className="p-8 h-full overflow-y-auto">
+            <SectionHeader 
+                title="Projects" 
+                subtitle="Manage your ongoing initiatives" 
+                action={<button onClick={onNewProject} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> New Project</button>} 
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {projects.map((p: any) => {
+                    const projectTasks = tasks.filter((t: any) => t.projectId === p.id);
+                    const taskCount = projectTasks.length;
+                    const overdueCount = projectTasks.filter((t: any) => t.status !== 'Done' && new Date(t.dueDate) < new Date()).length;
+                    const budget = p.budget?.total || 0;
+
+                    return (
+                        <div key={p.id} onClick={() => onSelectProject(p.id)} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition-all cursor-pointer group flex flex-col h-full">
+                             {/* Header */}
+                             <div className="mb-4">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-bold text-lg text-slate-800">{p.title}</h3>
+                                </div>
+                                <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">{p.category}</span>
+                             </div>
+                             
+                             <p className="text-sm text-slate-500 mb-6 flex-1 line-clamp-2">{p.description}</p>
+                             
+                             {/* Stats Grid */}
+                             <div className="grid grid-cols-3 gap-4 mb-6 border-t border-b border-slate-50 py-4">
+                                 <div>
+                                     <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Tasks</span>
+                                     <div className="flex items-center gap-1 font-bold text-slate-700 text-sm">
+                                         <CheckSquare size={14} className="text-slate-400" /> {taskCount}
+                                     </div>
+                                 </div>
+                                 <div>
+                                     <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Budget</span>
+                                     <div className="flex items-center gap-1 font-bold text-slate-700 text-sm">
+                                         <Wallet size={14} className="text-slate-400" /> ${budget.toLocaleString()}
+                                     </div>
+                                 </div>
+                                 <div>
+                                     <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Overdue</span>
+                                     <div className={`flex items-center gap-1 font-bold text-sm ${overdueCount > 0 ? 'text-red-600' : 'text-slate-700'}`}>
+                                         <AlertCircle size={14} className={overdueCount > 0 ? 'text-red-500' : 'text-slate-400'} /> {overdueCount}
+                                     </div>
+                                 </div>
+                             </div>
+
+                             {/* Progress */}
+                             <div className="mb-6">
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="text-slate-400 font-medium">Progress</span>
+                                    <span className="font-bold text-slate-700">{p.progress}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-green-500 h-full rounded-full" style={{width: `${p.progress}%`}} />
+                                </div>
+                             </div>
+
+                             {/* Footer */}
+                             <div className="flex justify-between items-center mt-auto pt-2">
+                                <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                                    <Calendar size={14} />
+                                    <span>{new Date(p.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                </div>
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase ${p.riskLevel === 'High' ? 'bg-red-50 text-red-700' : p.riskLevel === 'Medium' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
+                                    {p.riskLevel} RISK
+                                </span>
+                             </div>
+                        </div>
+                    );
+                })}
+                
+                {/* Dashed Create Card */}
+                <button 
+                    onClick={onNewProject}
+                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 font-bold hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/30 transition-all min-h-[320px] group"
+                >
+                    <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-4 group-hover:bg-white group-hover:shadow-md transition-all text-slate-300 group-hover:text-blue-500">
+                        <Plus size={28} />
+                    </div>
+                    <span className="font-bold text-sm">Create New Project</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // --- TasksView Component ---
 const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any) => {
     const [view, setView] = useState<'list' | 'kanban' | 'calendar'>('list');
@@ -771,7 +861,7 @@ const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any)
 
     const filteredTasks = useMemo(() => {
         return tasks.filter((t: any) => {
-            if (projectId && t.projectId !== projectId) return false;
+            if (projectId && projectId !== 'GLOBAL' && t.projectId !== projectId) return false;
             if (filter && !t.title.toLowerCase().includes(filter.toLowerCase())) return false;
             return true;
         });
@@ -811,7 +901,7 @@ const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any)
                                         <button 
                                             key={tpl.id}
                                             onClick={() => {
-                                                onAction('create', { ...tpl.structure, projectId, id: `TASK-${Date.now()}` });
+                                                onAction('create', { ...tpl.structure, projectId: projectId === 'GLOBAL' ? '' : projectId, id: `TASK-${Date.now()}` });
                                                 setIsTemplateMenuOpen(false);
                                             }}
                                             className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors truncate block"
@@ -826,7 +916,7 @@ const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any)
                             </div>
                         )}
                      </div>
-                     <button onClick={() => onAction('create', { projectId })} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-blue-700 transition-colors">
+                     <button onClick={() => onAction('create', { projectId: projectId === 'GLOBAL' ? '' : projectId })} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-blue-700 transition-colors">
                         <Plus size={16} /> New Task
                      </button>
                 </div>
@@ -889,7 +979,7 @@ const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any)
                                 }}
                                 onDragStart={(e: any, taskId: string) => e.dataTransfer.setData('taskId', taskId)}
                                 onEditTask={(t: any) => onAction('edit', t)}
-                                onNewTask={() => onAction('create', { list, projectId })}
+                                onNewTask={() => onAction('create', { list, projectId: projectId === 'GLOBAL' ? '' : projectId })}
                             />
                         ))}
                     </div>
@@ -899,7 +989,7 @@ const TasksView = ({ tasks, onUpdateTask, onAction, projectId, templates }: any)
                     <CalendarBoard 
                         tasks={filteredTasks}
                         onEditTask={(t: any) => onAction('edit', t)}
-                        onNewTaskWithDate={(date: string) => onAction('create', { dueDate: date, projectId })}
+                        onNewTaskWithDate={(date: string) => onAction('create', { dueDate: date, projectId: projectId === 'GLOBAL' ? '' : projectId })}
                     />
                 )}
             </div>
@@ -1175,6 +1265,477 @@ const ProjectDetailView = ({ project, tasks, onBack, onUpdateTask, onUpdateProje
             </div>
         </div>
     );
+};
+
+// --- PLAYBOOKS COMPONENTS ---
+
+const PlaybookGeneratorModal = ({ isOpen, onClose, onGenerate }: any) => {
+    const [goal, setGoal] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleGenerate = async () => {
+        if (!goal.trim()) return;
+        setLoading(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const prompt = `Create a multi-step automation playbook for the following goal: "${goal}".
+            Return ONLY a JSON object with this structure:
+            {
+              "name": "Creative Name",
+              "description": "Short description",
+              "leadType": "Target audience type",
+              "steps": [
+                {
+                  "channel": "email" | "whatsapp" | "voice" | "internal_task",
+                  "trigger": { "value": number, "unit": "hours" | "days" },
+                  "content": "Message body or task description"
+                }
+              ]
+            }
+            Create at least 3-5 steps with varied channels and logical delays.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+                config: { responseMimeType: "application/json" }
+            });
+
+            const text = response.text?.trim();
+            if (text) {
+                const data = JSON.parse(text);
+                onGenerate(data);
+                onClose();
+            }
+        } catch (e) {
+            console.error("Playbook generation failed", e);
+            alert("Failed to generate playbook. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 border border-indigo-100">
+                <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-2 text-indigo-600">
+                        <Sparkles size={20} />
+                        <h3 className="font-bold text-lg text-slate-800">AI Playbook Generator</h3>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
+                </div>
+                
+                <p className="text-slate-500 text-sm mb-4">Describe your automation goal (e.g., "Nurture real estate leads for 2 weeks" or "Follow up after a missed call"). AI will build the workflow.</p>
+                
+                <textarea 
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                    placeholder="e.g., Send a welcome email immediately, then a WhatsApp check-in after 2 days..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 min-h-[120px] resize-none mb-4 font-medium text-slate-700"
+                    autoFocus
+                />
+
+                <div className="flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-lg transition-colors">Cancel</button>
+                    <button 
+                        onClick={handleGenerate} 
+                        disabled={loading || !goal.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                        {loading ? 'Generating Workflow...' : 'Generate Playbook'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
+    const [data, setData] = useState<Playbook>(playbook);
+    const [editingStepId, setEditingStepId] = useState<string | null>(null);
+    const [rewritingStepId, setRewritingStepId] = useState<string | null>(null);
+
+    const VARIABLE_TAGS = ['{{lead_name}}', '{{company}}', '{{email}}', '{{phone}}', '{{location}}', '{{calendar_link}}', '{{portfolio_link}}'];
+
+    const updateStep = (id: string, updates: any) => {
+        setData(prev => ({
+            ...prev,
+            steps: prev.steps.map(s => s.id === id ? { ...s, ...updates } : s)
+        }));
+    };
+
+    const addStep = () => {
+        const newStep: PlaybookStep = {
+            id: `step-${Date.now()}`,
+            order: data.steps.length + 1,
+            channel: 'email',
+            trigger: { type: 'delay', value: 1, unit: 'days' },
+            content: ''
+        };
+        setData(prev => ({ ...prev, steps: [...prev.steps, newStep] }));
+        setEditingStepId(newStep.id);
+    };
+
+    const deleteStep = (id: string) => {
+        setData(prev => ({ ...prev, steps: prev.steps.filter(s => s.id !== id) }));
+    };
+
+    const handleAiRewrite = async (stepId: string, currentContent: string) => {
+        if (!currentContent.trim()) return;
+        setRewritingStepId(stepId);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const prompt = `You are an expert copywriter. Rewrite the following message to be more engaging, professional, and clear.
+            
+            Strict Rules:
+            1. PRESERVE all variables like {{lead_name}}, {{company}} exactly as they are.
+            2. Improve grammar and flow.
+            3. Make it sound natural and persuasive.
+            
+            Message: "${currentContent}"`;
+            
+            const response = await ai.models.generateContent({ 
+                model: 'gemini-3-flash-preview', 
+                contents: prompt 
+            });
+            const text = response.text?.trim();
+            if (text) {
+                updateStep(stepId, { content: text });
+            }
+        } catch (e) {
+            console.error("Rewrite failed", e);
+        } finally {
+            setRewritingStepId(null);
+        }
+    };
+
+    const insertVariable = (stepId: string, variable: string) => {
+        const step = data.steps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const textarea = document.getElementById(`content-${stepId}`) as HTMLTextAreaElement;
+        if (textarea) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = step.content;
+            const newText = text.substring(0, start) + variable + text.substring(end);
+            updateStep(stepId, { content: newText });
+            setTimeout(() => {
+                textarea.focus();
+                textarea.setSelectionRange(start + variable.length, start + variable.length);
+            }, 0);
+        } else {
+             updateStep(stepId, { content: step.content + variable });
+        }
+    };
+
+    const getIcon = (channel: string) => {
+        switch(channel) {
+            case 'email': return <Mail size={16}/>;
+            case 'whatsapp': return <MessageCircle size={16}/>;
+            case 'voice': return <Phone size={16}/>;
+            case 'internal_task': return <CheckSquare size={16}/>;
+            default: return <Bot size={16}/>;
+        }
+    };
+
+    const getColor = (channel: string) => {
+        switch(channel) {
+            case 'email': return 'bg-blue-100 text-blue-600 border-blue-200';
+            case 'whatsapp': return 'bg-green-100 text-green-600 border-green-200';
+            case 'voice': return 'bg-purple-100 text-purple-600 border-purple-200';
+            case 'internal_task': return 'bg-orange-100 text-orange-600 border-orange-200';
+            default: return 'bg-slate-100 text-slate-600 border-slate-200';
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col bg-slate-50">
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ChevronLeft size={20} /></button>
+                    <div>
+                        <input 
+                            value={data.name} 
+                            onChange={(e) => setData({...data, name: e.target.value})}
+                            className="text-xl font-bold text-slate-800 bg-transparent focus:outline-none focus:border-b-2 focus:border-primary"
+                        />
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target:</span>
+                            <input 
+                                value={data.leadType} 
+                                onChange={(e) => setData({...data, leadType: e.target.value})}
+                                className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-transparent focus:border-primary focus:outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 mr-4 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                        <span className="text-xs font-bold text-slate-500 uppercase">Status</span>
+                        <Toggle enabled={data.isActive} onToggle={() => setData({...data, isActive: !data.isActive})} size="sm" />
+                    </div>
+                    <button onClick={() => onSave(data)} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2 transition-all">
+                        <Save size={16} /> Save Changes
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full">
+                <div className="space-y-8 relative">
+                    <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-slate-200" />
+                    
+                    {data.steps.map((step, idx) => (
+                        <div key={step.id} className="relative pl-16 group">
+                            <div className={`absolute left-0 top-0 w-12 h-12 rounded-full border-4 border-white shadow-sm flex items-center justify-center z-10 transition-colors ${getColor(step.channel)}`}>
+                                {getIcon(step.channel)}
+                            </div>
+                            
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">Step {idx + 1}</span>
+                                        <div className="flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                                            <Clock size={12} />
+                                            Wait
+                                            <input 
+                                                type="number" 
+                                                value={step.trigger.value} 
+                                                onChange={(e) => updateStep(step.id, { trigger: { ...step.trigger, value: parseInt(e.target.value) || 0 } })}
+                                                className="w-10 bg-transparent text-center border-b border-slate-300 focus:border-primary focus:outline-none mx-1"
+                                            />
+                                            <select 
+                                                value={step.trigger.unit}
+                                                onChange={(e) => updateStep(step.id, { trigger: { ...step.trigger, unit: e.target.value } })}
+                                                className="bg-transparent border-none focus:ring-0 text-xs font-bold p-0 cursor-pointer"
+                                            >
+                                                <option value="hours">Hours</option>
+                                                <option value="days">Days</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => deleteStep(step.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <select 
+                                            value={step.channel}
+                                            onChange={(e) => updateStep(step.id, { channel: e.target.value })}
+                                            className="text-sm font-bold text-slate-700 bg-slate-50 border-none rounded-lg py-1 px-2 cursor-pointer focus:ring-0"
+                                        >
+                                            <option value="email">Send Email</option>
+                                            <option value="whatsapp">Send WhatsApp</option>
+                                            <option value="voice">AI Voice Call</option>
+                                            <option value="internal_task">Internal Task</option>
+                                        </select>
+                                        <button 
+                                            onClick={() => handleAiRewrite(step.id, step.content)}
+                                            disabled={rewritingStepId === step.id || !step.content.trim()}
+                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="Rewrite with AI"
+                                        >
+                                            {rewritingStepId === step.id ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                            {rewritingStepId === step.id ? 'Refining...' : 'AI Refine'}
+                                        </button>
+                                    </div>
+                                    <div className="relative">
+                                        <textarea 
+                                            id={`content-${step.id}`}
+                                            value={step.content}
+                                            onChange={(e) => updateStep(step.id, { content: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
+                                            placeholder={step.channel === 'internal_task' ? "Task description..." : "Message template..."}
+                                        />
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {VARIABLE_TAGS.map(tag => (
+                                                <button 
+                                                    key={tag} 
+                                                    onClick={() => insertVariable(step.id, tag)}
+                                                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-500 hover:border-primary hover:text-primary transition-colors"
+                                                    title={`Insert ${tag}`}
+                                                >
+                                                    {tag}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    <div className="pl-16">
+                        <button 
+                            onClick={addStep}
+                            className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:border-primary hover:text-primary hover:bg-blue-50/50 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Plus size={20} /> Add Next Step
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PlaybooksView = ({ playbooks, onCreatePlaybook, onUpdatePlaybook }: any) => {
+    const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(null);
+    const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+
+    if (selectedPlaybook) {
+        return (
+            <PlaybookEditor 
+                playbook={selectedPlaybook} 
+                onBack={() => setSelectedPlaybook(null)}
+                onSave={(updated: Playbook) => {
+                    onUpdatePlaybook(updated);
+                    setSelectedPlaybook(null);
+                }}
+            />
+        );
+    }
+
+    return (
+        <div className="h-full flex flex-col p-8 overflow-y-auto">
+            <PlaybookGeneratorModal 
+                isOpen={isGeneratorOpen} 
+                onClose={() => setIsGeneratorOpen(false)}
+                onGenerate={(data: any) => {
+                    const newPlaybook: Playbook = {
+                        id: `PB-${Date.now()}`,
+                        name: data.name,
+                        description: data.description,
+                        leadType: data.leadType,
+                        isActive: true,
+                        activeLeadsCount: 0,
+                        steps: data.steps.map((s: any, i: number) => ({
+                            id: `step-${i}-${Date.now()}`,
+                            order: i + 1,
+                            channel: s.channel,
+                            trigger: s.trigger,
+                            content: s.content
+                        }))
+                    };
+                    onCreatePlaybook(newPlaybook);
+                }}
+            />
+            
+            <SectionHeader 
+                title="Automation Playbooks" 
+                subtitle="Design intelligent workflows to nurture leads automatically." 
+                action={
+                    <button 
+                        onClick={() => setIsGeneratorOpen(true)} 
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all"
+                    >
+                        <Sparkles size={16}/> AI Generator
+                    </button>
+                } 
+            />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {playbooks.map((pb: any) => (
+                    <div 
+                        key={pb.id} 
+                        onClick={() => setSelectedPlaybook(pb)}
+                        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden"
+                    >
+                        <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-slate-600">
+                                <Pencil size={16} />
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-start mb-4">
+                            <div className={`p-3 rounded-2xl ${pb.isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                                <Zap size={24} fill={pb.isActive ? "currentColor" : "none"} />
+                            </div>
+                        </div>
+                        
+                        <h3 className="font-bold text-lg text-slate-800 mb-2 pr-8">{pb.name}</h3>
+                        <p className="text-sm text-slate-500 mb-6 line-clamp-2 h-10">{pb.description}</p>
+                        
+                        <div className="flex items-center gap-3 mb-4">
+                            {pb.steps.slice(0, 4).map((step: any, i: number) => (
+                                <div key={i} className="relative flex items-center">
+                                    <div className={`w-2 h-2 rounded-full ${step.channel === 'whatsapp' ? 'bg-green-500' : step.channel === 'email' ? 'bg-blue-500' : step.channel === 'voice' ? 'bg-purple-500' : 'bg-orange-500'}`} title={step.channel} />
+                                    {i < Math.min(pb.steps.length, 4) - 1 && <div className="w-4 h-px bg-slate-200 ml-1" />}
+                                </div>
+                            ))}
+                            {pb.steps.length > 4 && <span className="text-[10px] text-slate-400">+{pb.steps.length - 4}</span>}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 border-t border-slate-100 pt-4">
+                            <div className="flex items-center gap-1"><Users size={14}/> {pb.activeLeadsCount} Active Leads</div>
+                            <div className={`px-2 py-0.5 rounded-full ${pb.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {pb.isActive ? 'Active' : 'Paused'}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                
+                {/* Empty State Card for Quick Create */}
+                <button 
+                    onClick={() => setIsGeneratorOpen(true)}
+                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 font-bold hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all min-h-[240px]"
+                >
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 group-hover:bg-white group-hover:shadow-md">
+                        <Plus size={24} />
+                    </div>
+                    <span className="font-bold">Create New Playbook</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const Sidebar = ({ activeView, onNavigate }: any) => {
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+    { id: 'leads', label: 'Leads & CRM', icon: Users },
+    { id: 'playbooks', label: 'Playbooks', icon: Zap },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  return (
+    <aside className="w-64 bg-slate-900 text-white flex flex-col h-full flex-shrink-0">
+      <div className="p-6 border-b border-slate-800">
+        <div className="flex items-center gap-2 text-indigo-400">
+           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+           <span className="font-bold text-xl text-white tracking-tight">Seyal AI</span>
+        </div>
+      </div>
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        {menuItems.map(item => (
+            <button
+                key={item.id}
+                onClick={() => onNavigate(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+                <item.icon size={18} />
+                {item.label}
+            </button>
+        ))}
+      </nav>
+      <div className="p-4 border-t border-slate-800">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/50">
+             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold">JD</div>
+             <div className="flex-1 min-w-0">
+                 <div className="text-sm font-bold truncate">John Doe</div>
+                 <div className="text-xs text-slate-500 truncate">john@seyal.ai</div>
+             </div>
+          </div>
+      </div>
+    </aside>
+  );
 };
 
 const DashboardView = ({ projects, tasks, leads }: any) => {
@@ -1777,480 +2338,7 @@ const NewProjectModal = ({ isOpen, onClose, onCreate }: any) => {
     );
 }
 
-// --- PLAYBOOKS COMPONENTS ---
-
-const PlaybookGeneratorModal = ({ isOpen, onClose, onGenerate }: any) => {
-    const [goal, setGoal] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    if (!isOpen) return null;
-
-    const handleGenerate = async () => {
-        if (!goal.trim()) return;
-        setLoading(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `Create a multi-step automation playbook for the following goal: "${goal}".
-            Return ONLY a JSON object with this structure:
-            {
-              "name": "Creative Name",
-              "description": "Short description",
-              "leadType": "Target audience type",
-              "steps": [
-                {
-                  "channel": "email" | "whatsapp" | "voice" | "internal_task",
-                  "trigger": { "value": number, "unit": "hours" | "days" },
-                  "content": "Message body or task description"
-                }
-              ]
-            }
-            Create at least 3-5 steps with varied channels and logical delays.`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
-            });
-
-            const text = response.text?.trim();
-            if (text) {
-                const data = JSON.parse(text);
-                onGenerate(data);
-                onClose();
-            }
-        } catch (e) {
-            console.error("Playbook generation failed", e);
-            alert("Failed to generate playbook. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 border border-indigo-100">
-                <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-2 text-indigo-600">
-                        <Sparkles size={20} />
-                        <h3 className="font-bold text-lg">AI Playbook Generator</h3>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
-                </div>
-                
-                <p className="text-slate-500 text-sm mb-4">Describe your automation goal (e.g., "Nurture real estate leads for 2 weeks" or "Follow up after a missed call"). AI will build the workflow.</p>
-                
-                <textarea 
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                    placeholder="e.g., Send a welcome email immediately, then a WhatsApp check-in after 2 days..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 min-h-[120px] resize-none mb-4 font-medium text-slate-700"
-                    autoFocus
-                />
-
-                <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold text-sm hover:bg-slate-50 rounded-lg transition-colors">Cancel</button>
-                    <button 
-                        onClick={handleGenerate} 
-                        disabled={loading || !goal.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                        {loading ? 'Generating Workflow...' : 'Generate Playbook'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
-    const [data, setData] = useState<Playbook>(playbook);
-    const [editingStepId, setEditingStepId] = useState<string | null>(null);
-    const [rewritingStepId, setRewritingStepId] = useState<string | null>(null);
-
-    const VARIABLE_TAGS = ['{{lead_name}}', '{{company}}', '{{email}}', '{{phone}}', '{{location}}', '{{calendar_link}}', '{{portfolio_link}}'];
-
-    const updateStep = (id: string, updates: any) => {
-        setData(prev => ({
-            ...prev,
-            steps: prev.steps.map(s => s.id === id ? { ...s, ...updates } : s)
-        }));
-    };
-
-    const addStep = () => {
-        const newStep: PlaybookStep = {
-            id: `step-${Date.now()}`,
-            order: data.steps.length + 1,
-            channel: 'email',
-            trigger: { type: 'delay', value: 1, unit: 'days' },
-            content: ''
-        };
-        setData(prev => ({ ...prev, steps: [...prev.steps, newStep] }));
-        setEditingStepId(newStep.id);
-    };
-
-    const deleteStep = (id: string) => {
-        setData(prev => ({ ...prev, steps: prev.steps.filter(s => s.id !== id) }));
-    };
-
-    const handleAiRewrite = async (stepId: string, currentContent: string) => {
-        if (!currentContent.trim()) return;
-        setRewritingStepId(stepId);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `You are an expert copywriter. Rewrite the following message to be more engaging, professional, and clear.
-            
-            Strict Rules:
-            1. PRESERVE all variables like {{lead_name}}, {{company}} exactly as they are.
-            2. Improve grammar and flow.
-            3. Make it sound natural and persuasive.
-            
-            Message: "${currentContent}"`;
-            
-            const response = await ai.models.generateContent({ 
-                model: 'gemini-3-flash-preview', 
-                contents: prompt 
-            });
-            const text = response.text?.trim();
-            if (text) {
-                updateStep(stepId, { content: text });
-            }
-        } catch (e) {
-            console.error("Rewrite failed", e);
-        } finally {
-            setRewritingStepId(null);
-        }
-    };
-
-    const insertVariable = (stepId: string, variable: string) => {
-        const step = data.steps.find(s => s.id === stepId);
-        if (!step) return;
-        
-        const textarea = document.getElementById(`content-${stepId}`) as HTMLTextAreaElement;
-        if (textarea) {
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-            const text = step.content;
-            const newText = text.substring(0, start) + variable + text.substring(end);
-            updateStep(stepId, { content: newText });
-            setTimeout(() => {
-                textarea.focus();
-                textarea.setSelectionRange(start + variable.length, start + variable.length);
-            }, 0);
-        } else {
-             updateStep(stepId, { content: step.content + variable });
-        }
-    };
-
-    const getIcon = (channel: string) => {
-        switch(channel) {
-            case 'email': return <Mail size={16}/>;
-            case 'whatsapp': return <MessageCircle size={16}/>;
-            case 'voice': return <Phone size={16}/>;
-            case 'internal_task': return <CheckSquare size={16}/>;
-            default: return <Bot size={16}/>;
-        }
-    };
-
-    const getColor = (channel: string) => {
-        switch(channel) {
-            case 'email': return 'bg-blue-100 text-blue-600 border-blue-200';
-            case 'whatsapp': return 'bg-green-100 text-green-600 border-green-200';
-            case 'voice': return 'bg-purple-100 text-purple-600 border-purple-200';
-            case 'internal_task': return 'bg-orange-100 text-orange-600 border-orange-200';
-            default: return 'bg-slate-100 text-slate-600 border-slate-200';
-        }
-    };
-
-    return (
-        <div className="h-full flex flex-col bg-slate-50">
-            <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><ChevronLeft size={20} /></button>
-                    <div>
-                        <input 
-                            value={data.name} 
-                            onChange={(e) => setData({...data, name: e.target.value})}
-                            className="text-xl font-bold text-slate-800 bg-transparent focus:outline-none focus:border-b-2 focus:border-primary"
-                        />
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target:</span>
-                            <input 
-                                value={data.leadType} 
-                                onChange={(e) => setData({...data, leadType: e.target.value})}
-                                className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-transparent focus:border-primary focus:outline-none"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 mr-4 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                        <span className="text-xs font-bold text-slate-500 uppercase">Status</span>
-                        <Toggle enabled={data.isActive} onToggle={() => setData({...data, isActive: !data.isActive})} size="sm" />
-                    </div>
-                    <button onClick={() => onSave(data)} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-blue-700 flex items-center gap-2 transition-all">
-                        <Save size={16} /> Save Changes
-                    </button>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full">
-                <div className="space-y-8 relative">
-                    <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-slate-200" />
-                    
-                    {data.steps.map((step, idx) => (
-                        <div key={step.id} className="relative pl-16 group">
-                            <div className={`absolute left-0 top-0 w-12 h-12 rounded-full border-4 border-white shadow-sm flex items-center justify-center z-10 transition-colors ${getColor(step.channel)}`}>
-                                {getIcon(step.channel)}
-                            </div>
-                            
-                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">Step {idx + 1}</span>
-                                        <div className="flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                                            <Clock size={12} />
-                                            Wait
-                                            <input 
-                                                type="number" 
-                                                value={step.trigger.value} 
-                                                onChange={(e) => updateStep(step.id, { trigger: { ...step.trigger, value: parseInt(e.target.value) || 0 } })}
-                                                className="w-10 bg-transparent text-center border-b border-slate-300 focus:border-primary focus:outline-none mx-1"
-                                            />
-                                            <select 
-                                                value={step.trigger.unit}
-                                                onChange={(e) => updateStep(step.id, { trigger: { ...step.trigger, unit: e.target.value } })}
-                                                className="bg-transparent border-none focus:ring-0 text-xs font-bold p-0 cursor-pointer"
-                                            >
-                                                <option value="hours">Hours</option>
-                                                <option value="days">Days</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => deleteStep(step.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <select 
-                                            value={step.channel}
-                                            onChange={(e) => updateStep(step.id, { channel: e.target.value })}
-                                            className="text-sm font-bold text-slate-700 bg-slate-50 border-none rounded-lg py-1 px-2 cursor-pointer focus:ring-0"
-                                        >
-                                            <option value="email">Send Email</option>
-                                            <option value="whatsapp">Send WhatsApp</option>
-                                            <option value="voice">AI Voice Call</option>
-                                            <option value="internal_task">Internal Task</option>
-                                        </select>
-                                        <button 
-                                            onClick={() => handleAiRewrite(step.id, step.content)}
-                                            disabled={rewritingStepId === step.id || !step.content.trim()}
-                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title="Rewrite with AI"
-                                        >
-                                            {rewritingStepId === step.id ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                            {rewritingStepId === step.id ? 'Refining...' : 'AI Refine'}
-                                        </button>
-                                    </div>
-                                    <div className="relative">
-                                        <textarea 
-                                            id={`content-${step.id}`}
-                                            value={step.content}
-                                            onChange={(e) => updateStep(step.id, { content: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                                            placeholder={step.channel === 'internal_task' ? "Task description..." : "Message template..."}
-                                        />
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                            {VARIABLE_TAGS.map(tag => (
-                                                <button 
-                                                    key={tag} 
-                                                    onClick={() => insertVariable(step.id, tag)}
-                                                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-500 hover:border-primary hover:text-primary transition-colors"
-                                                    title={`Insert ${tag}`}
-                                                >
-                                                    {tag}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    <div className="pl-16">
-                        <button 
-                            onClick={addStep}
-                            className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:border-primary hover:text-primary hover:bg-blue-50/50 transition-all flex items-center justify-center gap-2"
-                        >
-                            <Plus size={20} /> Add Next Step
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const PlaybooksView = ({ playbooks, onCreatePlaybook, onUpdatePlaybook }: any) => {
-    const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(null);
-    const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
-
-    if (selectedPlaybook) {
-        return (
-            <PlaybookEditor 
-                playbook={selectedPlaybook} 
-                onBack={() => setSelectedPlaybook(null)}
-                onSave={(updated: Playbook) => {
-                    onUpdatePlaybook(updated);
-                    setSelectedPlaybook(null);
-                }}
-            />
-        );
-    }
-
-    return (
-        <div className="h-full flex flex-col p-8 overflow-y-auto">
-            <PlaybookGeneratorModal 
-                isOpen={isGeneratorOpen} 
-                onClose={() => setIsGeneratorOpen(false)}
-                onGenerate={(data: any) => {
-                    const newPlaybook: Playbook = {
-                        id: `PB-${Date.now()}`,
-                        name: data.name,
-                        description: data.description,
-                        leadType: data.leadType,
-                        isActive: true,
-                        activeLeadsCount: 0,
-                        steps: data.steps.map((s: any, i: number) => ({
-                            id: `step-${i}-${Date.now()}`,
-                            order: i + 1,
-                            channel: s.channel,
-                            trigger: s.trigger,
-                            content: s.content
-                        }))
-                    };
-                    onCreatePlaybook(newPlaybook);
-                }}
-            />
-            
-            <SectionHeader 
-                title="Automation Playbooks" 
-                subtitle="Design intelligent workflows to nurture leads automatically." 
-                action={
-                    <button 
-                        onClick={() => setIsGeneratorOpen(true)} 
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all"
-                    >
-                        <Sparkles size={16}/> AI Generator
-                    </button>
-                } 
-            />
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {playbooks.map((pb: any) => (
-                    <div 
-                        key={pb.id} 
-                        onClick={() => setSelectedPlaybook(pb)}
-                        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden"
-                    >
-                        <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="bg-slate-100 p-2 rounded-full text-slate-400 hover:text-slate-600">
-                                <Pencil size={16} />
-                            </div>
-                        </div>
-                        
-                        <div className="flex justify-between items-start mb-4">
-                            <div className={`p-3 rounded-2xl ${pb.isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-                                <Zap size={24} fill={pb.isActive ? "currentColor" : "none"} />
-                            </div>
-                        </div>
-                        
-                        <h3 className="font-bold text-lg text-slate-800 mb-2 pr-8">{pb.name}</h3>
-                        <p className="text-sm text-slate-500 mb-6 line-clamp-2 h-10">{pb.description}</p>
-                        
-                        <div className="flex items-center gap-3 mb-4">
-                            {pb.steps.slice(0, 4).map((step: any, i: number) => (
-                                <div key={i} className="relative flex items-center">
-                                    <div className={`w-2 h-2 rounded-full ${step.channel === 'whatsapp' ? 'bg-green-500' : step.channel === 'email' ? 'bg-blue-500' : step.channel === 'voice' ? 'bg-purple-500' : 'bg-orange-500'}`} title={step.channel} />
-                                    {i < Math.min(pb.steps.length, 4) - 1 && <div className="w-4 h-px bg-slate-200 ml-1" />}
-                                </div>
-                            ))}
-                            {pb.steps.length > 4 && <span className="text-[10px] text-slate-400">+{pb.steps.length - 4}</span>}
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 border-t border-slate-100 pt-4">
-                            <div className="flex items-center gap-1"><Users size={14}/> {pb.activeLeadsCount} Active Leads</div>
-                            <div className={`px-2 py-0.5 rounded-full ${pb.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                                {pb.isActive ? 'Active' : 'Paused'}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-                
-                {/* Empty State Card for Quick Create */}
-                <button 
-                    onClick={() => setIsGeneratorOpen(true)}
-                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-400 font-bold hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all min-h-[240px]"
-                >
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-4 group-hover:bg-white group-hover:shadow-md">
-                        <Plus size={24} />
-                    </div>
-                    <span className="font-bold">Create New Playbook</span>
-                </button>
-            </div>
-        </div>
-    );
-};
-
-// --- Added Components ---
-
-const Sidebar = ({ activeView, onNavigate }: any) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'projects', label: 'Projects', icon: Briefcase },
-    { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-    { id: 'leads', label: 'Leads & CRM', icon: Users },
-    { id: 'playbooks', label: 'Playbooks', icon: Zap },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
-
-  return (
-    <aside className="w-64 bg-slate-900 text-white flex flex-col h-full flex-shrink-0">
-      <div className="p-6 border-b border-slate-800">
-        <div className="flex items-center gap-2 text-indigo-400">
-           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
-           <span className="font-bold text-xl text-white tracking-tight">Seyal AI</span>
-        </div>
-      </div>
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map(item => (
-            <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-            >
-                <item.icon size={18} />
-                {item.label}
-            </button>
-        ))}
-      </nav>
-      <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/50">
-             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold">JD</div>
-             <div className="flex-1 min-w-0">
-                 <div className="text-sm font-bold truncate">John Doe</div>
-                 <div className="text-xs text-slate-500 truncate">john@seyal.ai</div>
-             </div>
-          </div>
-      </div>
-    </aside>
-  );
-};
-
-// --- Main App Component ---
+// --- MAIN APP COMPONENT ---
 
 const App = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
@@ -2270,7 +2358,6 @@ const App = () => {
         if (exists) return prev.map(t => t.id === updatedTask.id ? updatedTask : t);
         return [...prev, updatedTask];
     });
-    // If we are currently editing this task, update the reference so the panel stays current
     if (editingTask && editingTask.id === updatedTask.id) {
         setEditingTask(updatedTask);
     }
@@ -2337,12 +2424,10 @@ const App = () => {
 
   const handleTaskAction = (action: string, data: any) => {
       if (action === 'create') {
-          // If data has an ID, it's a template instantiation or a new task with data
           if (data.id) {
               setTasks(prev => [...prev, data]);
-              setEditingTask(data); // Open it immediately for editing
+              setEditingTask(data);
           } else {
-              // Open empty task creator
               setEditingTask({ 
                   id: `TASK-${Date.now()}`, 
                   projectId: data.projectId || 'GLOBAL', 
@@ -2363,7 +2448,7 @@ const App = () => {
                   aiHistory: [], 
                   budget: { planned: 0, agreed: 0, advance: 0, status: 'None', paymentDueDate: '' }, 
                   list: 'General',
-                  ...data // Merge any template data
+                  ...data 
               });
           }
       } else if (action === 'edit') {
@@ -2377,7 +2462,6 @@ const App = () => {
       }
   };
 
-  // --- Playbook Handlers ---
   const handleCreatePlaybook = (newPlaybook: Playbook) => {
       setPlaybooks(prev => [...prev, newPlaybook]);
   };
@@ -2414,30 +2498,12 @@ const App = () => {
             templates={taskTemplates}
         />;
       case 'projects':
-         return (
-            <div className="p-8 h-full overflow-y-auto">
-                <SectionHeader title="Projects" subtitle="All your ongoing initiatives." action={<button onClick={() => setIsNewProjectModalOpen(true)} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> New Project</button>} />
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {projects.map(p => (
-                        <div key={p.id} onClick={() => setSelectedProjectId(p.id)} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition-all cursor-pointer group">
-                             <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors"><Briefcase size={24} /></div>
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${p.status === 'Execution' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
-                             </div>
-                             <h3 className="font-bold text-lg text-slate-800 mb-1">{p.title}</h3>
-                             <p className="text-sm text-slate-500 mb-4 line-clamp-2">{p.description}</p>
-                             <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4 overflow-hidden">
-                                <div className="bg-blue-600 h-full rounded-full" style={{width: `${p.progress}%`}}></div>
-                             </div>
-                             <div className="flex justify-between items-center text-xs font-bold text-slate-400">
-                                <span>{p.category}</span>
-                                <span>{p.progress}%</span>
-                             </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-         );
+         return <ProjectsView 
+            projects={projects} 
+            onSelectProject={setSelectedProjectId} 
+            onNewProject={() => setIsNewProjectModalOpen(true)}
+            tasks={tasks}
+         />;
       case 'leads':
         return <LeadsView leads={leads} onAddLead={() => setIsNewLeadModalOpen(true)} />;
       case 'playbooks':
@@ -2466,8 +2532,6 @@ const App = () => {
             onClose={() => setIsNewLeadModalOpen(false)}
             onSave={handleCreateLead}
         />
-        
-        {/* Global Task Detail Panel */}
         <TaskDetailPanel 
             isOpen={!!editingTask} 
             onClose={() => setEditingTask(null)}
