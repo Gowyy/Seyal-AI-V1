@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { 
   X, Share2, MoreHorizontal, List as ListIcon, ChevronDown, Check, Plus, 
   Bot, MessageCircle, Phone, Repeat, History as HistoryIcon, 
@@ -139,54 +139,24 @@ interface Lead {
   lastContact: string;
 }
 
-interface ActivityLogItem {
-  id: string;
-  projectId: string;
-  type: 'status_change' | 'comment' | 'ai_action' | 'budget_update' | 'creation' | 'upload' | 'task_update';
-  user: string;
-  userInitials?: string;
-  action: string;
-  details: string;
-  timestamp: string;
-  relatedId?: string;
-}
-
-interface NewProjectPayload {
-  title: string;
-  category: string;
-  startDate: string;
-  endDate: string;
-  budget: number;
-  description: string;
-  clientType?: ClientType;
-  companyName?: string;
-  clientName?: string;
-  clientEmail?: string;
-  clientStdCode?: string;
-  clientPhone?: string;
-  status?: ProjectStatus;
-  riskLevel?: 'Low' | 'Medium' | 'High';
-  initialTasks?: Partial<Task>[];
-}
-
 // --- Playbook Types ---
 interface PlaybookStep {
   id: string;
   order: number;
-  channel: 'email' | 'whatsapp' | 'voice' | 'internal_task';
+  channel: string;
   trigger: {
-    type: 'delay';
-    value: number; // value in hours
-    unit: 'hours' | 'days';
+    type: string;
+    value: number;
+    unit: string;
   };
-  content: string; // Message template or task description
+  content: string;
   condition?: string;
 }
 
 interface Playbook {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   leadType: string;
   isActive: boolean;
   steps: PlaybookStep[];
@@ -455,13 +425,13 @@ const CustomTimePicker = ({ value, onChange, compact, label, className }: any) =
   </div>
 );
 
-const Toggle = ({ enabled, onToggle, size }: any) => (
-  <button 
-    onClick={onToggle} 
-    className={`${size === 'sm' ? 'w-8 h-4' : 'w-11 h-6'} rounded-full transition-colors relative ${enabled ? 'bg-primary' : 'bg-slate-300'}`}
-  >
-    <div className={`absolute top-0.5 left-0.5 bg-white rounded-full shadow transition-transform ${size === 'sm' ? 'w-3 h-3' : 'w-5 h-5'} ${enabled ? (size === 'sm' ? 'translate-x-4' : 'translate-x-5') : 'translate-x-0'}`} />
-  </button>
+const Toggle = ({ enabled, onToggle, size }: { enabled: boolean; onToggle: () => void; size?: string }) => (
+    <button 
+        onClick={onToggle} 
+        className={`${enabled ? 'bg-indigo-600' : 'bg-slate-300'} relative inline-flex ${size === 'sm' ? 'h-4 w-7' : 'h-6 w-11'} items-center rounded-full transition-colors focus:outline-none`}
+    >
+        <span className={`${enabled ? (size === 'sm' ? 'translate-x-3.5' : 'translate-x-6') : 'translate-x-1'} inline-block ${size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'} transform rounded-full bg-white transition-transform`} />
+    </button>
 );
 
 const ActionMenu = ({ isOpen, onClose, onShare, onClone, onArchive, onDelete, itemType = "Task" }: any) => {
@@ -535,30 +505,6 @@ const SectionHeader = ({ title, subtitle, action }: any) => (
     {action}
   </div>
 );
-
-const NotificationToast = ({ message, onUndo, onClose, duration = 5000 }: { message: string, onUndo?: () => void, onClose: () => void, duration?: number }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, duration);
-    return () => clearTimeout(timer);
-  }, [onClose, duration]);
-
-  return (
-    <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-4 z-[100] animate-in slide-in-from-bottom duration-300">
-      <div className="flex items-center gap-2">
-        <Check size={16} className="text-green-400" />
-        <span className="text-sm font-medium">{message}</span>
-      </div>
-      {onUndo && (
-        <button onClick={onUndo} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors">
-          UNDO
-        </button>
-      )}
-      <button onClick={onClose} className="text-slate-400 hover:text-white">
-        <X size={16} />
-      </button>
-    </div>
-  );
-};
 
 // ... [TaskRow, KanbanColumn, CalendarBoard, TaskDetailPanel Components] ...
 const TaskRow = ({ task, onUpdateTask, onAction, onEdit }: any) => {
@@ -1280,8 +1226,9 @@ const PlaybookGeneratorModal = ({ isOpen, onClose, onGenerate }: any) => {
         setLoading(true);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const prompt = `Create a multi-step automation playbook for the following goal: "${goal}".
-            Return ONLY a JSON object with this structure:
+            const prompt = `Create a sophisticated, multi-step automation playbook for the goal: "${goal}".
+            
+            Return ONLY a JSON object with this exact schema:
             {
               "name": "Creative Name",
               "description": "Short description",
@@ -1290,11 +1237,19 @@ const PlaybookGeneratorModal = ({ isOpen, onClose, onGenerate }: any) => {
                 {
                   "channel": "email" | "whatsapp" | "voice" | "internal_task",
                   "trigger": { "value": number, "unit": "hours" | "days" },
-                  "content": "Message body or task description"
+                  "content": "Message body or task description",
+                  "condition": "String (optional condition, e.g., 'If no reply', 'If lead score > 50')"
                 }
               ]
             }
-            Create at least 3-5 steps with varied channels and logical delays.`;
+            
+            Requirements:
+            1. Generate 5-8 detailed steps.
+            2. Use a strategic mix of channels (email, whatsapp, voice, internal_task).
+            3. Use logical delays (e.g., immediate welcome, 2-day follow-up).
+            4. CRITICAL: Include specific 'condition' logic for at least 3 steps to show branching (e.g., "If email opened", "If no reply", "If budget > $10k").
+            5. Content must be professional, engaging, and use variables like {{lead_name}}, {{company}} where appropriate.
+            `;
 
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
@@ -1357,8 +1312,28 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
     const [data, setData] = useState<Playbook>(playbook);
     const [editingStepId, setEditingStepId] = useState<string | null>(null);
     const [rewritingStepId, setRewritingStepId] = useState<string | null>(null);
+    const [draggedStepId, setDraggedStepId] = useState<string | null>(null);
+    const [toneMenuStepId, setToneMenuStepId] = useState<string | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     const VARIABLE_TAGS = ['{{lead_name}}', '{{company}}', '{{email}}', '{{phone}}', '{{location}}', '{{calendar_link}}', '{{portfolio_link}}'];
+    
+    const TONE_OPTIONS = [
+        { id: 'Professional', label: 'Professional', icon: <Briefcase size={12} className="text-blue-500" /> },
+        { id: 'Friendly', label: 'Friendly', icon: <MessageCircle size={12} className="text-green-500" /> },
+        { id: 'Urgent', label: 'Urgent', icon: <Clock size={12} className="text-red-500" /> },
+        { id: 'Concise', label: 'Concise', icon: <FileText size={12} className="text-slate-500" /> }
+    ];
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setToneMenuStepId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const updateStep = (id: string, updates: any) => {
         setData(prev => ({
@@ -1373,7 +1348,8 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
             order: data.steps.length + 1,
             channel: 'email',
             trigger: { type: 'delay', value: 1, unit: 'days' },
-            content: ''
+            content: '',
+            condition: ''
         };
         setData(prev => ({ ...prev, steps: [...prev.steps, newStep] }));
         setEditingStepId(newStep.id);
@@ -1383,9 +1359,10 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
         setData(prev => ({ ...prev, steps: prev.steps.filter(s => s.id !== id) }));
     };
 
-    const handleAiRewrite = async (stepId: string, currentContent: string) => {
+    const handleAiRewrite = async (stepId: string, currentContent: string, tone: string) => {
         if (!currentContent.trim()) return;
         setRewritingStepId(stepId);
+        setToneMenuStepId(null);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const prompt = `You are an expert copywriter. Rewrite the following message to be more engaging, professional, and clear.
@@ -1394,6 +1371,7 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
             1. PRESERVE all variables like {{lead_name}}, {{company}} exactly as they are.
             2. Improve grammar and flow.
             3. Make it sound natural and persuasive.
+            4. Tone: ${tone}
             
             Message: "${currentContent}"`;
             
@@ -1430,6 +1408,37 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
         } else {
              updateStep(stepId, { content: step.content + variable });
         }
+    };
+
+    const handleDragStart = (e: React.DragEvent, id: string) => {
+        setDraggedStepId(id);
+        e.dataTransfer.effectAllowed = "move";
+        // Use a transparent image or style override if needed, but default is usually fine
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+    };
+
+    const handleDrop = (e: React.DragEvent, targetId: string) => {
+        e.preventDefault();
+        if (!draggedStepId || draggedStepId === targetId) return;
+
+        const steps = [...data.steps];
+        const draggedIndex = steps.findIndex(s => s.id === draggedStepId);
+        const targetIndex = steps.findIndex(s => s.id === targetId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        const [draggedItem] = steps.splice(draggedIndex, 1);
+        steps.splice(targetIndex, 0, draggedItem);
+
+        // Update order property
+        const updatedSteps = steps.map((s, index) => ({ ...s, order: index + 1 }));
+        
+        setData({ ...data, steps: updatedSteps });
+        setDraggedStepId(null);
     };
 
     const getIcon = (channel: string) => {
@@ -1489,7 +1498,19 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
                     <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-slate-200" />
                     
                     {data.steps.map((step, idx) => (
-                        <div key={step.id} className="relative pl-16 group">
+                        <div 
+                            key={step.id} 
+                            className={`relative pl-16 group transition-all duration-200 ease-in-out ${draggedStepId === step.id ? 'opacity-40 scale-[0.98]' : 'opacity-100'}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, step.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, step.id)}
+                        >
+                            {/* Grip Handle */}
+                            <div className="absolute -left-6 top-6 p-2 text-slate-300 hover:text-slate-500 cursor-move opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                <GripVertical size={20} />
+                            </div>
+
                             <div className={`absolute left-0 top-0 w-12 h-12 rounded-full border-4 border-white shadow-sm flex items-center justify-center z-10 transition-colors ${getColor(step.channel)}`}>
                                 {getIcon(step.channel)}
                             </div>
@@ -1523,7 +1544,8 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
                                 </div>
 
                                 <div className="space-y-3">
-                                    <div className="flex justify-between items-center">
+                                    {/* Channel Selector & AI Rewrite */}
+                                    <div className="flex justify-between items-center relative" ref={menuRef}>
                                         <select 
                                             value={step.channel}
                                             onChange={(e) => updateStep(step.id, { channel: e.target.value })}
@@ -1534,16 +1556,52 @@ const PlaybookEditor = ({ playbook, onSave, onBack }: any) => {
                                             <option value="voice">AI Voice Call</option>
                                             <option value="internal_task">Internal Task</option>
                                         </select>
-                                        <button 
-                                            onClick={() => handleAiRewrite(step.id, step.content)}
-                                            disabled={rewritingStepId === step.id || !step.content.trim()}
-                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title="Rewrite with AI"
-                                        >
-                                            {rewritingStepId === step.id ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                            {rewritingStepId === step.id ? 'Refining...' : 'AI Refine'}
-                                        </button>
+                                        
+                                        <div className="relative">
+                                            <button 
+                                                onClick={() => setToneMenuStepId(toneMenuStepId === step.id ? null : step.id)}
+                                                disabled={rewritingStepId === step.id || !step.content.trim()}
+                                                className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                title="Rewrite with AI"
+                                            >
+                                                {rewritingStepId === step.id ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                                {rewritingStepId === step.id ? 'Refining...' : 'AI Refine'}
+                                                {rewritingStepId !== step.id && <ChevronDown size={10} className={`transition-transform duration-200 ${toneMenuStepId === step.id ? 'rotate-180' : ''}`} />}
+                                            </button>
+                                            
+                                            {toneMenuStepId === step.id && (
+                                                <div className="absolute right-0 top-full mt-2 z-20 bg-white shadow-xl border border-slate-100 rounded-xl p-2 min-w-[140px] flex flex-col gap-1 animate-in fade-in zoom-in-95 origin-top-right">
+                                                    <div className="text-[10px] font-bold text-slate-400 px-2 pb-1 border-b border-slate-50 mb-1">Select Tone</div>
+                                                    {TONE_OPTIONS.map(t => (
+                                                        <button 
+                                                            key={t.id} 
+                                                            onClick={() => handleAiRewrite(step.id, step.content, t.label)} 
+                                                            className="text-left text-xs hover:bg-indigo-50 hover:text-indigo-700 p-2 rounded-lg text-slate-600 font-medium transition-colors flex items-center justify-between group"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                {t.icon}
+                                                                <span>{t.label}</span>
+                                                            </div>
+                                                            <Sparkles size={10} className="opacity-0 group-hover:opacity-100 text-indigo-400" />
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+
+                                    {/* Conditional Logic Input */}
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-100 rounded-lg">
+                                        <div className="text-amber-500 font-bold text-[10px] uppercase shrink-0">Condition</div>
+                                        <input 
+                                            value={step.condition || ''}
+                                            onChange={(e) => updateStep(step.id, { condition: e.target.value })}
+                                            placeholder="Optional (e.g. 'If email not opened')"
+                                            className="w-full bg-transparent text-xs text-amber-900 placeholder:text-amber-300 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    {/* Content Editor */}
                                     <div className="relative">
                                         <textarea 
                                             id={`content-${step.id}`}
@@ -1619,7 +1677,8 @@ const PlaybooksView = ({ playbooks, onCreatePlaybook, onUpdatePlaybook }: any) =
                             order: i + 1,
                             channel: s.channel,
                             trigger: s.trigger,
-                            content: s.content
+                            content: s.content,
+                            condition: s.condition
                         }))
                     };
                     onCreatePlaybook(newPlaybook);
