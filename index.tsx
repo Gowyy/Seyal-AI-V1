@@ -7,7 +7,7 @@ import {
   List as ListIcon, ChevronLeft, Save, GripVertical, Clock, Trash2, Plus, 
   Upload, Folder, FileText, Wallet, DollarSign, TrendingUp, Target, 
   Pencil, Brain, ChevronDown, Calendar, Kanban as KanbanIcon, LayoutTemplate,
-  CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Copy
+  CheckCircle2, ArrowRight, ArrowUp, ArrowDown, Copy, Search
 } from 'lucide-react';
 
 // --- Polyfill for process.env ---
@@ -1193,26 +1193,125 @@ const MeetingIntelligenceModal = ({ isOpen, onClose, onSave, contextType }: any)
     );
 };
 
+// --- Task Detail Panel ---
 const TaskDetailPanel = ({ isOpen, onClose, task, onSave, onAddMeeting }: any) => {
     if (!isOpen || !task) return null;
     const [localTask, setLocalTask] = useState(task);
     useEffect(() => setLocalTask(task), [task]);
-    
+
+    // Handlers for subtasks
+    const toggleSubtask = (id: string) => {
+        const newSubtasks = localTask.subtasks.map((st: any) => 
+            st.id === id ? { ...st, completed: !st.completed } : st
+        );
+        setLocalTask({ ...localTask, subtasks: newSubtasks });
+    };
+
+    const addSubtask = () => {
+        const newSub = { id: Date.now().toString(), text: 'New subtask', completed: false };
+        setLocalTask({ ...localTask, subtasks: [...(localTask.subtasks || []), newSub] });
+    };
+
     return (
-        <div className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-slate-200 z-[100] transform transition-transform duration-300 ease-in-out flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-slate-200 z-[100] transform transition-transform duration-300 ease-in-out flex flex-col animate-in slide-in-from-right">
              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
-                <h2 className="text-xl font-bold text-slate-800">Task Details</h2>
-                <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                <div className="flex items-center gap-3">
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <h2 className="text-xl font-bold text-slate-800">Task Details</h2>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => onSave(localTask)} className="bg-primary text-white px-4 py-2 rounded-lg font-bold text-xs shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Save</button>
+                </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                {/* Header Inputs */}
                 <div>
                     <input className="w-full text-2xl font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none mb-4" value={localTask.title} onChange={e => setLocalTask({...localTask, title: e.target.value})} />
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-4">
                         <select className="bg-slate-100 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer" value={localTask.status} onChange={e => setLocalTask({...localTask, status: e.target.value})}>{['Todo', 'In Progress', 'Done'].map(s => <option key={s} value={s}>{s}</option>)}</select>
                         <select className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer" value={localTask.priority} onChange={e => setLocalTask({...localTask, priority: e.target.value})}>{['Low', 'Medium', 'High', 'Urgent'].map(s => <option key={s} value={s}>{s}</option>)}</select>
+                        <input type="date" className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 uppercase tracking-wide cursor-pointer" value={localTask.dueDate} onChange={e => setLocalTask({...localTask, dueDate: e.target.value})} />
                     </div>
                 </div>
+
+                {/* Subtasks */}
+                <div>
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-sm font-bold text-slate-800">Subtasks</h3>
+                        <button onClick={addSubtask} className="text-xs text-primary font-bold hover:underline">+ Add</button>
+                    </div>
+                    <div className="space-y-2">
+                        {(localTask.subtasks || []).map((st: any) => (
+                            <div key={st.id} className="flex items-center gap-3 group">
+                                <button onClick={() => toggleSubtask(st.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${st.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-slate-400'}`}>
+                                    {st.completed && <CheckSquare size={12} />}
+                                </button>
+                                <input 
+                                    className={`flex-1 text-sm bg-transparent border-none focus:outline-none ${st.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}
+                                    value={st.text}
+                                    onChange={(e) => {
+                                        const newSubtasks = localTask.subtasks.map((s:any) => s.id === st.id ? {...s, text: e.target.value} : s);
+                                        setLocalTask({...localTask, subtasks: newSubtasks});
+                                    }}
+                                />
+                                <button onClick={() => setLocalTask({...localTask, subtasks: localTask.subtasks.filter((s:any) => s.id !== st.id)})} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                            </div>
+                        ))}
+                        {(!localTask.subtasks || localTask.subtasks.length === 0) && <div className="text-xs text-slate-400 italic">No subtasks</div>}
+                    </div>
+                </div>
+
+                {/* AI Coordination Section */}
+                <div className="bg-indigo-50/50 rounded-xl p-5 border border-indigo-100">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                            <Bot size={18} className="text-indigo-600" />
+                            <h3 className="text-sm font-bold text-indigo-900">AI Coordination</h3>
+                        </div>
+                        <button 
+                            onClick={() => setLocalTask({...localTask, aiCoordination: !localTask.aiCoordination})}
+                            className={`w-10 h-5 rounded-full p-1 transition-colors ${localTask.aiCoordination ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                        >
+                            <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${localTask.aiCoordination ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                        </button>
+                    </div>
+                    {localTask.aiCoordination && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100 cursor-pointer">
+                                    <input type="checkbox" checked={localTask.aiChannels?.whatsapp} onChange={e => setLocalTask({...localTask, aiChannels: {...localTask.aiChannels, whatsapp: e.target.checked}})} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                    <span className="text-xs font-bold text-slate-700">WhatsApp</span>
+                                </label>
+                                <label className="flex items-center gap-2 p-3 bg-white rounded-lg border border-indigo-100 cursor-pointer">
+                                    <input type="checkbox" checked={localTask.aiChannels?.email} onChange={e => setLocalTask({...localTask, aiChannels: {...localTask.aiChannels, email: e.target.checked}})} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                    <span className="text-xs font-bold text-slate-700">Email</span>
+                                </label>
+                            </div>
+                            <div className="bg-white rounded-lg border border-indigo-100 p-3">
+                                <div className="text-[10px] font-bold text-indigo-400 uppercase mb-2">Recent AI Actions</div>
+                                <div className="space-y-2">
+                                    {(localTask.aiHistory || []).map((h: any) => (
+                                        <div key={h.id} className="flex gap-3 text-xs">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5 shrink-0"></div>
+                                            <div>
+                                                <span className="font-bold text-slate-700">{h.action}</span>
+                                                <span className="text-slate-400 mx-1">•</span>
+                                                <span className="text-slate-500">{new Date(h.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                <p className="text-slate-500 mt-0.5">{h.details}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!localTask.aiHistory || localTask.aiHistory.length === 0) && <div className="text-slate-400 italic">No activity yet</div>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Description */}
                 <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Description</label><textarea className="w-full min-h-[120px] text-sm text-slate-600 leading-relaxed border border-slate-200 rounded-xl p-4 focus:outline-none focus:border-indigo-500 resize-none" value={localTask.description} onChange={e => setLocalTask({...localTask, description: e.target.value})} placeholder="Add details..." /></div>
+                
+                {/* Meetings */}
                 <div>
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><Sparkles size={12} className="text-indigo-500" /> Meeting Insights</label>
@@ -1224,9 +1323,6 @@ const TaskDetailPanel = ({ isOpen, onClose, task, onSave, onAddMeeting }: any) =
                         <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-xl"><p className="text-xs text-slate-400 font-medium">No meeting insights attached</p></div>
                     )}
                 </div>
-            </div>
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
-                <button onClick={() => onSave(localTask)} className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-blue-700 transition-all">Save Changes</button>
             </div>
         </div>
     );
@@ -1857,17 +1953,17 @@ const ProjectDetailView = ({ project, tasks, onBack, onUpdateTask, onAction, onA
                      <button onClick={() => onAddMeeting(project.id)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">
                         <Brain size={16}/> Meeting Notes
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20">
+                    <button onClick={() => onAction('create', { projectId: project.id })} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20">
                         <Plus size={16}/> Add Task
                     </button>
                 </div>
             </div>
-            <div className="px-8 border-b border-slate-200 flex gap-8">
-                {['Overview', 'Tasks', 'Budget', 'Files'].map((tab) => (
+            <div className="px-8 border-b border-slate-200 flex gap-8 overflow-x-auto">
+                {['Overview', 'Tasks', 'Budget', 'Files', 'Invoices', 'Meetings'].map((tab) => (
                     <button 
                         key={tab} 
                         onClick={() => setActiveTab(tab.toLowerCase())}
-                        className={`py-4 text-sm font-bold border-b-2 transition-all ${activeTab === tab.toLowerCase() ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        className={`py-4 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${activeTab === tab.toLowerCase() ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
                         {tab}
                     </button>
@@ -1926,6 +2022,38 @@ const ProjectDetailView = ({ project, tasks, onBack, onUpdateTask, onAction, onA
                 {activeTab === 'tasks' && <TasksView tasks={projectTasks} onUpdateTask={onUpdateTask} onAction={onAction} hideHeader={true} />}
                 {activeTab === 'budget' && <BudgetView project={project} tasks={projectTasks} />}
                 {activeTab === 'files' && <ProjectFilesView files={[]} onUpload={() => {}} />}
+                {activeTab === 'invoices' && (
+                    <div className="text-center py-20 text-slate-400">
+                        <FileText size={48} className="mx-auto mb-4 opacity-50"/>
+                        <p className="font-bold">No Invoices</p>
+                        <p className="text-sm">Create an invoice to start tracking payments.</p>
+                    </div>
+                )}
+                {activeTab === 'meetings' && (
+                    <div className="space-y-4">
+                        {project.meetings && project.meetings.length > 0 ? project.meetings.map((m: any) => (
+                             <div key={m.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-bold text-lg text-slate-800">{m.title}</h3>
+                                    <span className="text-xs font-bold text-slate-500">{formatDateDisplay(m.date)}</span>
+                                </div>
+                                <p className="text-slate-600 mb-4">{m.summary}</p>
+                                <div className="bg-slate-50 p-4 rounded-xl">
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Action Items</h4>
+                                    <ul className="list-disc list-inside text-sm text-slate-700">
+                                        {m.actionItems.map((item: string, i: number) => <li key={i}>{item}</li>)}
+                                    </ul>
+                                </div>
+                             </div>
+                        )) : (
+                            <div className="text-center py-20 text-slate-400">
+                                <Brain size={48} className="mx-auto mb-4 opacity-50"/>
+                                <p className="font-bold">No Meeting Notes</p>
+                                <p className="text-sm">Record or transcribe meetings to see insights here.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -2021,6 +2149,19 @@ const DashboardView = ({ projects, tasks, leads }: any) => {
 }
 
 const LeadsView = ({ leads, playbooks, onAddLead, onAction, onBulkUpdate, onSave }: any) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [serviceFilter, setServiceFilter] = useState('All');
+
+    const filteredLeads = leads.filter((lead: any) => {
+        const matchesSearch = (lead.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                               lead.company?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                               lead.email?.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
+        const matchesService = serviceFilter === 'All' || lead.serviceType === serviceFilter;
+        return matchesSearch && matchesStatus && matchesService;
+    });
+
     return (
         <div className="p-8 h-full overflow-y-auto">
              <SectionHeader title="Leads & CRM" subtitle="Track potential clients and deals" action={
@@ -2028,6 +2169,38 @@ const LeadsView = ({ leads, playbooks, onAddLead, onAction, onBulkUpdate, onSave
                     <Plus size={16}/> Add Lead
                 </button>
             } />
+            
+            <div className="flex flex-wrap gap-4 mb-6">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                        type="text" 
+                        placeholder="Search leads..." 
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <div className="flex gap-4">
+                    <select 
+                        className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:border-primary cursor-pointer hover:border-slate-300 transition-colors"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                        <option value="All">All Statuses</option>
+                        {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select 
+                        className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:border-primary cursor-pointer hover:border-slate-300 transition-colors"
+                        value={serviceFilter}
+                        onChange={(e) => setServiceFilter(e.target.value)}
+                    >
+                        <option value="All">All Services</option>
+                        {AVAILABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+            </div>
+
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left">
                     <thead className="bg-slate-50 border-b border-slate-200">
@@ -2042,7 +2215,7 @@ const LeadsView = ({ leads, playbooks, onAddLead, onAction, onBulkUpdate, onSave
                         </tr>
                     </thead>
                     <tbody>
-                        {leads.map((lead: any) => {
+                        {filteredLeads.map((lead: any) => {
                              const playbook = playbooks.find((p: any) => p.id === lead.playbookId);
                              return (
                                 <tr key={lead.id} className="border-b border-slate-100 hover:bg-slate-50 group">
@@ -2079,6 +2252,13 @@ const LeadsView = ({ leads, playbooks, onAddLead, onAction, onBulkUpdate, onSave
                                 </tr>
                              );
                         })}
+                        {filteredLeads.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 text-sm">
+                                    No leads found matching your filters.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
